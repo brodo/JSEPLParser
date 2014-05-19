@@ -99,92 +99,92 @@ updateExpr = UPDATE _ ISTREAM _ updateDetails
 updateDetails = classIdentifier _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ SET _ onSetAssignmentList _(WHERE _ whereClause)?
 onMergeExpr = MERGE _ INTO? keywordNotAllowedIdent (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? (WHERE _ whereClause)? mergeItem+
 mergeItem = (mergeMatched / mergeUnmatched)
-mergeMatched = WHEN _ MATCHED (AND_EXPR _ expression)? mergeMatchedItem+
-mergeMatchedItem = THEN (( UPDATE _ SET _ onSetAssignmentList) (WHERE _ whereClause)? / DELETE (WHERE _ whereClause)? / mergeInsert )
-mergeUnmatched = WHEN _ NOT_EXPR _ MATCHED (AND_EXPR _ expression)? mergeUnmatchedItem+
+mergeMatched = WHEN _ MATCHED _ (AND_EXPR _ expression)? _ mergeMatchedItem+
+mergeMatchedItem = THEN _ (( UPDATE _ SET _ onSetAssignmentList)_ (WHERE _ whereClause)? / DELETE (WHERE _ whereClause)? / mergeInsert )
+mergeUnmatched = WHEN _ NOT_EXPR _ MATCHED _ (AND_EXPR _ expression)? _ mergeUnmatchedItem+
 mergeUnmatchedItem = THEN _ mergeInsert;    
-mergeInsert = INSERT (INTO _ classIdentifier)? (LPAREN _ columnList _ RPAREN)? SELECT _ selectionList (WHERE _ whereClause)?
+mergeInsert = INSERT _ (INTO _ classIdentifier)? _ (LPAREN _ columnList _ RPAREN)? _ SELECT _ selectionList _ (WHERE _ whereClause)?
 onSelectExpr  
     = (INSERT _ insertIntoExpr)?    
-    SELECT (AND_EXPR? DELETE)? DISTINCT? selectionList
-    onExprFrom?
-    (WHERE _ whereClause)?    
-    (GROUP _ BY _ groupByListExpr)?
-    (HAVING _ havingClause)?
-    (ORDER _ BY _ orderByListExpr)?
-    (ROW_LIMIT_EXPR _ rowLimit)?
-onUpdateExpr = UPDATE _ keywordNotAllowedIdent (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? SET _ onSetAssignmentList (WHERE _ whereClause)?
-onSelectInsertExpr = INSERT _ insertIntoExpr _ SELECT _ selectionList (WHERE _ whereClause)?
-outputClauseInsert = OUTPUT (FIRST / ALL)
-onDeleteExpr = DELETE _ onExprFrom (WHERE _ whereClause)?
+    _ SELECT _ (AND_EXPR? _ DELETE)? _ DISTINCT? _ selectionList
+    _ onExprFrom?
+    _ (WHERE _ whereClause)?    
+    _ (GROUP _ BY _ groupByListExpr)?
+    _ (HAVING _ havingClause)?
+    _ (ORDER _ BY _ orderByListExpr)?
+    _ (ROW_LIMIT_EXPR _ rowLimit)?
+onUpdateExpr = UPDATE _ keywordNotAllowedIdent _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ SET _ onSetAssignmentList _ (WHERE _ whereClause)?
+onSelectInsertExpr = INSERT _ insertIntoExpr _ SELECT _ selectionList _ (WHERE _ whereClause)?
+outputClauseInsert = OUTPUT _ (FIRST / ALL)
+onDeleteExpr = DELETE _ onExprFrom _ (WHERE _ whereClause)?
 onSetExpr = SET _ onSetAssignmentList
-onSetAssignmentList = onSetAssignment (COMMA _ onSetAssignment)*
+onSetAssignmentList = onSetAssignment _ (COMMA _ onSetAssignment)*
 onSetAssignment = eventProperty _ EQUALS _ expression / expression
-onExprFrom = FROM _ keywordNotAllowedIdent (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)?
-createWindowExpr = CREATE _ WINDOW _ keywordNotAllowedIdent (DOT _ viewExpression (DOT _ viewExpression)*)? (RETAINUNION/RETAININTERSECTION)? AS? 
+onExprFrom = FROM _ keywordNotAllowedIdent _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)?
+createWindowExpr = CREATE _ WINDOW _ keywordNotAllowedIdent _ (DOT _ viewExpression (DOT _ viewExpression)*)? _ (RETAINUNION/RETAININTERSECTION)? _ AS? 
       ( createWindowExprModelAfter / LPAREN _ createColumnList _ RPAREN)   
       (INSERT (WHERE _ expression)? )?
-createWindowExprModelAfter = (SELECT _ createSelectionList _ FROM)? classIdentifier
-createIndexExpr = CREATE (keywordNotAllowedIdent)? INDEX _ keywordNotAllowedIdent _ ON _ keywordNotAllowedIdent _ LPAREN _ createIndexColumnList _ RPAREN
-createIndexColumnList = createIndexColumn (COMMA _ createIndexColumn)*
+createWindowExprModelAfter = (SELECT _ createSelectionList _ FROM)? _ classIdentifier
+createIndexExpr = CREATE _ (keywordNotAllowedIdent)? _ INDEX _ keywordNotAllowedIdent _ ON _ keywordNotAllowedIdent _ LPAREN _ createIndexColumnList _ RPAREN
+createIndexColumnList = createIndexColumn _ (COMMA _ createIndexColumn)*
 createIndexColumn = keywordNotAllowedIdent _ keywordNotAllowedIdent? 
-createVariableExpr = CREATE _ keywordNotAllowedIdent? VARIABLE _ classIdentifier (LBRACK _ RBRACK)? keywordNotAllowedIdent (EQUALS _ expression)?
-createColumnList = createColumnListElement (COMMA _ createColumnListElement)*
-createColumnListElement = classIdentifier (classIdentifier (LBRACK _ RBRACK)?) 
-createSelectionList = createSelectionListElement (COMMA _ createSelectionListElement)* 
-createSelectionListElement = STAR / eventProperty (AS _ keywordNotAllowedIdent)? / constant _ AS _ keywordNotAllowedIdent
-createSchemaExpr = CREATE _ keywordNotAllowedIdent? createSchemaDef
-createSchemaDef = SCHEMA _ keywordNotAllowedIdent _ AS? ( variantList / LPAREN _ createColumnList? RPAREN ) createSchemaQual*
-fafDelete = DELETE _ FROM _ classIdentifier (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? (WHERE _ whereClause)?
+createVariableExpr = CREATE _ keywordNotAllowedIdent? _ VARIABLE _ classIdentifier _ (LBRACK _ RBRACK)? _ keywordNotAllowedIdent _ (EQUALS _ expression)?
+createColumnList = createColumnListElement _ (COMMA _ createColumnListElement)*
+createColumnListElement = classIdentifier _ (classIdentifier _ (LBRACK _ RBRACK)?) 
+createSelectionList = createSelectionListElement _ (COMMA _ createSelectionListElement)* 
+createSelectionListElement = STAR / eventProperty _ (AS _ keywordNotAllowedIdent)? / constant _ AS _ keywordNotAllowedIdent
+createSchemaExpr = CREATE _ keywordNotAllowedIdent? _ createSchemaDef
+createSchemaDef = SCHEMA _ keywordNotAllowedIdent _ AS? _ ( variantList / LPAREN _ createColumnList? RPAREN ) _ createSchemaQual*
+fafDelete = DELETE _ FROM _ classIdentifier _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ (WHERE _ whereClause)?
 fafUpdate = UPDATE _ updateDetails
 fafInsert = INSERT _ insertIntoExpr _ VALUES _ LPAREN _ expressionList _ RPAREN
 createDataflow = CREATE _ DATAFLOW _ keywordNotAllowedIdent _ AS? gopList
 gopList = gop _ gop*
-gop = annotationEnum* (keywordNotAllowedIdent / SELECT) gopParams? gopOut? LCURLY _ gopDetail? COMMA? RCURLY / createSchemaExpr _ COMMA; 
+gop = annotationEnum* _ (keywordNotAllowedIdent / SELECT) _ gopParams? gopOut? LCURLY _ gopDetail? _ COMMA? _ RCURLY / createSchemaExpr _ COMMA; 
 gopParams = LPAREN _ gopParamsItemList _ RPAREN
-gopParamsItemList = gopParamsItem (COMMA _ gopParamsItem)*
-gopParamsItem = (classIdentifier / gopParamsItemMany) gopParamsItemAs?
-gopParamsItemMany = LPAREN _ classIdentifier (COMMA _ classIdentifier) RPAREN
+gopParamsItemList = gopParamsItem _ (COMMA _ gopParamsItem)*
+gopParamsItem = (classIdentifier / gopParamsItemMany) _ gopParamsItemAs?
+gopParamsItemMany = LPAREN _ classIdentifier _ (COMMA _ classIdentifier) _ RPAREN
 gopParamsItemAs = AS _ keywordNotAllowedIdent
-gopOut = FOLLOWED_BY _ gopOutItem (COMMA _ gopOutItem)*
+gopOut = FOLLOWED_BY _ gopOutItem _ (COMMA _ gopOutItem)*
 gopOutItem = classIdentifier _ gopOutTypeList?
-gopOutTypeList = LT _ gopOutTypeParam (COMMA _ gopOutTypeParam)* GT;  
+gopOutTypeList = LT _ gopOutTypeParam _ (COMMA _ gopOutTypeParam)* _ GT;  
 gopOutTypeParam = (gopOutTypeItem / QUESTION)
 gopOutTypeItem = classIdentifier _ gopOutTypeList?
-gopDetail = gopConfig (COMMA _ gopConfig)*
-gopConfig = SELECT (COLON/EQUALS) LPAREN _ selectExpr _ RPAREN / keywordNotAllowedIdent (COLON/EQUALS) (expression / jsonobject / jsonarray)
-streamFilterExpression = keywordNotAllowedIdent (DOT _ viewExpression (DOT _ viewExpression)*)?
+gopDetail = gopConfig _ (COMMA _ gopConfig)*
+gopConfig = SELECT _ (COLON/EQUALS) _ LPAREN _ selectExpr _ RPAREN / keywordNotAllowedIdent _ (COLON/EQUALS) _ (expression / jsonobject / jsonarray)
+streamFilterExpression = keywordNotAllowedIdent _ (DOT _ viewExpression _ (DOT _ viewExpression)*)?
 createContextExpr = CREATE _ CONTEXT _ keywordNotAllowedIdent _ AS? _ createContextDetail
 createExpressionExpr = CREATE _ expressionDecl
-createContextDetail = createContextChoice / contextContextNested _ COMMA _ contextContextNested (COMMA _ contextContextNested)*
-contextContextNested = CONTEXT _ keywordNotAllowedIdent _ AS? createContextChoice
+createContextDetail = createContextChoice / contextContextNested _ COMMA _ contextContextNested _ (COMMA _ contextContextNested)*
+contextContextNested = CONTEXT _ keywordNotAllowedIdent _ AS? _ createContextChoice
 createContextChoice = START _ (ATCHAR _ keywordNotAllowedIdent / createContextRangePoint) _ END _ createContextRangePoint
-    / _ INITIATED _ (BY)? createContextDistinct? _ (ATCHAR _ keywordNotAllowedIdent _ AND_EXPR)? createContextRangePoint _ TERMINATED _ (BY)? _ createContextRangePoint
-    / _ PARTITION _ (BY)? createContextPartitionItem _ (COMMA  _ createContextPartitionItem)* 
-    / _ createContextGroupItem _ (COMMA _ createContextGroupItem)* FROM _ eventFilterExpression
-    / _ COALESCE _ (BY)? createContextCoalesceItem (COMMA _ createContextCoalesceItem)* keywordNotAllowedIdent _ number (keywordNotAllowedIdent)?
-createContextDistinct = DISTINCT _ LPAREN _ expressionList? RPAREN
+    / _ INITIATED _ (BY)? _ createContextDistinct? _ (ATCHAR _ keywordNotAllowedIdent _ AND_EXPR)? _ createContextRangePoint _ TERMINATED _ (BY)? _ createContextRangePoint
+    / _ PARTITION _ (BY)? _ createContextPartitionItem _ (COMMA  _ createContextPartitionItem)* 
+    / _ createContextGroupItem _ (COMMA _ createContextGroupItem)* _ FROM _ eventFilterExpression
+    / _ COALESCE _ (BY)? _ createContextCoalesceItem _ (COMMA _ createContextCoalesceItem)* _ keywordNotAllowedIdent _ number _ (keywordNotAllowedIdent)?
+createContextDistinct = DISTINCT _ LPAREN _ expressionList? _ RPAREN
 createContextRangePoint = createContextFilter 
-                / patternInclusionExpression (ATCHAR _ keywordNotAllowedIdent)?
+                / patternInclusionExpression _ (ATCHAR _ keywordNotAllowedIdent)?
                 / crontabLimitParameterSet
                 / AFTER _ timePeriod
-createContextFilter = eventFilterExpression (AS? keywordNotAllowedIdent)?
-createContextPartitionItem = eventProperty ((AND_EXPR/COMMA) eventProperty)* FROM _ eventFilterExpression
+createContextFilter = eventFilterExpression _ (AS? keywordNotAllowedIdent)?
+createContextPartitionItem = eventProperty _ ((AND_EXPR/COMMA) _ eventProperty)* _ FROM _ eventFilterExpression
 createContextCoalesceItem = libFunctionNoClass _ FROM _ eventFilterExpression
-createContextGroupItem = GROUP _ BY? expression _ AS _ keywordNotAllowedIdent; 
+createContextGroupItem = GROUP _ BY? _ expression _ AS _ keywordNotAllowedIdent; 
 createSchemaQual = keywordNotAllowedIdent _ columnList
-variantList = variantListElement (COMMA _ variantListElement)*
+variantList = variantListElement _ (COMMA _ variantListElement)*
 variantListElement = STAR / classIdentifier
-insertIntoExpr = (ISTREAM / RSTREAM / IRSTREAM)? INTO _ classIdentifier (LPAREN _ columnList _ RPAREN)?
-columnList = keywordNotAllowedIdent (COMMA _ keywordNotAllowedIdent)*
-fromClause = stream:streamExpression join:(regularJoin / outerJoinList)
+insertIntoExpr = (ISTREAM / RSTREAM / IRSTREAM)? _ INTO _ classIdentifier _ (LPAREN _ columnList _ RPAREN)?
+columnList = keywordNotAllowedIdent _ (COMMA _ keywordNotAllowedIdent)*
+fromClause = stream:streamExpression _ join:(regularJoin / outerJoinList)
 {
   return {"stream": stream, "join": join};
 }
 regularJoin = (COMMA _ streamExpression)*
-outerJoinList = outerJoin (outerJoin)*
-outerJoin = (((LEFT/RIGHT/FULL) OUTER)? / (INNER)) JOIN _ streamExpression _ outerJoinIdent?
-outerJoinIdent = ON _ outerJoinIdentPair (AND_EXPR _ outerJoinIdentPair)*
+outerJoinList = outerJoin _ (outerJoin)*
+outerJoin = (((LEFT/RIGHT/FULL) _ OUTER)? / (INNER)) _ JOIN _ streamExpression _ outerJoinIdent?
+outerJoinIdent = ON _ outerJoinIdentPair _ (AND_EXPR _ outerJoinIdentPair)*
 outerJoinIdentPair = eventProperty _ EQUALS _ eventProperty 
 whereClause = evalOrExpression
 selectClause = _ stream:(RSTREAM / ISTREAM / IRSTREAM)? _ d:DISTINCT? _ list:selectionList
@@ -202,7 +202,7 @@ selectionListElement = element:(STAR / streamSelector / selectionListElementExpr
   {
     return element; 
   }
-selectionListElementExpr = exp:expression _ ann:selectionListElementAnno? (AS? IDENT)?
+selectionListElementExpr = exp:expression _ ann:selectionListElementAnno? _ (AS? _ IDENT)?
 {
   return {"type": "selectionListElementExpr", "expression": exp, "annotation": ann};
 }
@@ -212,7 +212,7 @@ streamSelector = ident:keywordNotAllowedIdent (DOT STAR)? _ as:(AS _ keywordNotA
   return {"type": "streamSelector", "ident": ident}
 }
 streamExpression = exp:(eventFilterExpression / patternInclusionExpression / databaseJoinExpression / methodJoinExpression ) _
-    view:(DOT _ viewExpression (DOT _ viewExpression)*)? _ as:(AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
+    view:(DOT _ viewExpression _ (DOT _ viewExpression)*)? _ as:(AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
     {
       var isUnidirectional = (uni !== null),
         shouldRetain = (retain !== null);
@@ -224,32 +224,32 @@ streamExpression = exp:(eventFilterExpression / patternInclusionExpression / dat
         "shouldRetain": shouldRetain
       };
     }
-forExpr = FOR _ keywordNotAllowedIdent (LPAREN _ expressionList? RPAREN)?
+forExpr = FOR _ keywordNotAllowedIdent _ (LPAREN _ expressionList? _ RPAREN)?
 patternInclusionExpression = PATTERN _ ann:annotationEnum* _ LBRACK _ expr:patternExpression _ RBRACK {
   return {"annotation": ann, "expression": expr};
 }
-databaseJoinExpression = SQL _ COLON _ keywordNotAllowedIdent _ LBRACK (STRING_LITERAL / QUOTED_STRING_LITERAL) (METADATASQL (STRING_LITERAL / QUOTED_STRING_LITERAL))? RBRACK; 
-methodJoinExpression = keywordNotAllowedIdent _ COLON _ classIdentifier (LPAREN _ expressionList? RPAREN)?
-viewExpression = keywordNotAllowedIdent _ COLON (keywordNotAllowedIdent/MERGE) LPAREN _ expressionWithTimeList? RPAREN
-groupByListExpr = groupByListChoice (COMMA _ groupByListChoice)*
+databaseJoinExpression = SQL _ COLON _ keywordNotAllowedIdent _ LBRACK (STRING_LITERAL / QUOTED_STRING_LITERAL) _ (METADATASQL _ (STRING_LITERAL / QUOTED_STRING_LITERAL))? _ RBRACK; 
+methodJoinExpression = keywordNotAllowedIdent _ COLON _ classIdentifier _ (LPAREN _ expressionList? RPAREN)?
+viewExpression = keywordNotAllowedIdent _ COLON (keywordNotAllowedIdent/MERGE) _ LPAREN _ expressionWithTimeList? _ RPAREN
+groupByListExpr = groupByListChoice _ (COMMA _ groupByListChoice)*
 groupByListChoice = expression / groupByCubeOrRollup / groupByGroupingSets
-groupByCubeOrRollup = (CUBE / ROLLUP) LPAREN _ groupByCombinableExpr (COMMA _ groupByCombinableExpr)* RPAREN
-groupByGroupingSets = GROUPING _ SETS _ LPAREN _ groupBySetsChoice (COMMA _ groupBySetsChoice)* RPAREN
+groupByCubeOrRollup = (CUBE / ROLLUP) _ LPAREN _ groupByCombinableExpr _ (COMMA _ groupByCombinableExpr)* _ RPAREN
+groupByGroupingSets = GROUPING _ SETS _ LPAREN _ groupBySetsChoice _ (COMMA _ groupBySetsChoice)* _ RPAREN
 groupBySetsChoice = groupByCubeOrRollup / groupByCombinableExpr
-groupByCombinableExpr = expression / LPAREN (expression (COMMA _ expression)*)? RPAREN
+groupByCombinableExpr = expression / LPAREN _ (expression _ (COMMA _ expression)*)? _ RPAREN
 orderByListExpr = orderByListElement (COMMA _ orderByListElement)*
-orderByListElement = expression (ASC/DESC)?
+orderByListElement = expression _ (ASC/DESC)?
 havingClause = evalOrExpression
-outputLimit = outputLimitAfter? (ALL/FIRST/LAST/SNAPSHOT)? 
+outputLimit = outputLimitAfter? _ (ALL/FIRST/LAST/SNAPSHOT)? 
   (
-    ( EVERY_EXPR ( timePeriod / (number / keywordNotAllowedIdent) (EVENTS)))
-    / ( AT _ crontabLimitParameterSet)
-    / ( WHEN _ expression (THEN _ onSetExpr)? )
-    / ( WHEN _ TERMINATED (AND_EXPR _ expression)? (THEN _ onSetExpr)? )
+    ( _ EVERY_EXPR _ ( timePeriod / (number / keywordNotAllowedIdent) _ (EVENTS)))
+    / ( _ AT _ crontabLimitParameterSet)
+    / ( _ WHEN _ expression (_ THEN _ onSetExpr)? )
+    / ( _ WHEN _ TERMINATED (_ AND_EXPR _ expression)? (_THEN _ onSetExpr)? )
   ) outputLimitAndTerm?
-outputLimitAndTerm = AND_EXPR _ WHEN _ TERMINATED (AND_EXPR _ expression)? (THEN _ onSetExpr)?
-outputLimitAfter = AFTER (timePeriod / number _ EVENTS)  
-rowLimit = (numberconstant / keywordNotAllowedIdent) ((COMMA / OFFSET) (numberconstant / keywordNotAllowedIdent))?;  
+outputLimitAndTerm = AND_EXPR _ WHEN _ TERMINATED _ (AND_EXPR _ expression)? _ (THEN _ onSetExpr)?
+outputLimitAfter = AFTER _ (timePeriod / number _ EVENTS)  
+rowLimit = (numberconstant / keywordNotAllowedIdent) _ ((COMMA / OFFSET) _ (numberconstant / keywordNotAllowedIdent))?;  
 crontabLimitParameterSet = LPAREN _ expressionWithTimeList _ RPAREN;      
 whenClause = (WHEN _ expression _ THEN _ expression)
 elseClause = (ELSE _ expression);
