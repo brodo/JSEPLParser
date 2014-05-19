@@ -263,21 +263,21 @@ elseClause = (ELSE _ expression);
 // Anchoring ^ $
 // Alternation  \
 //
-matchRecog = MATCH_RECOGNIZE _ LPAREN _ matchRecogPartitionBy? matchRecogMeasures _ matchRecogMatchesSelection? matchRecogMatchesAfterSkip? matchRecogPattern 
+matchRecog = MATCH_RECOGNIZE _ LPAREN _ matchRecogPartitionBy? _ matchRecogMeasures _ matchRecogMatchesSelection? _ matchRecogMatchesAfterSkip? _ matchRecogPattern 
     matchRecogMatchesInterval? matchRecogDefine _ RPAREN 
-matchRecogPartitionBy = PARTITION _ BY _ expression (COMMA _ expression)*    
-matchRecogMeasures = MEASURES _ matchRecogMeasureItem (COMMA _ matchRecogMeasureItem)*
-matchRecogMeasureItem = expression (AS (keywordNotAllowedIdent)? )?
+matchRecogPartitionBy = PARTITION _ BY _ expression _ (COMMA _ expression)*    
+matchRecogMeasures = MEASURES _ matchRecogMeasureItem _ (COMMA _ matchRecogMeasureItem)*
+matchRecogMeasureItem = expression _ (AS (keywordNotAllowedIdent)? )?
 matchRecogMatchesSelection = ALL _ MATCHES
 matchRecogPattern = PATTERN _ LPAREN _ matchRecogPatternAlteration _ RPAREN
 matchRecogMatchesAfterSkip = AFTER _ IDENT _ IDENT _ IDENT _ IDENT _ IDENT
 matchRecogMatchesInterval = keywordNotAllowedIdent _ timePeriod (OR_EXPR _ TERMINATED)?
-matchRecogPatternAlteration = matchRecogPatternConcat (BOR _ matchRecogPatternConcat)* 
+matchRecogPatternAlteration = matchRecogPatternConcat _ (BOR _ matchRecogPatternConcat)* 
 matchRecogPatternConcat = matchRecogPatternUnary+ 
 matchRecogPatternUnary = matchRecogPatternNested / matchRecogPatternAtom
 matchRecogPatternNested = LPAREN _ matchRecogPatternAlteration _ RPAREN (STAR / PLUS / QUESTION)?
-matchRecogPatternAtom = keywordNotAllowedIdent ((STAR / PLUS / QUESTION) (QUESTION)? )?
-matchRecogDefine = DEFINE _ matchRecogDefineItem (COMMA _ matchRecogDefineItem)* 
+matchRecogPatternAtom = keywordNotAllowedIdent _ ((STAR / PLUS / QUESTION) _ (QUESTION)? )?
+matchRecogDefine = DEFINE _ matchRecogDefineItem _ (COMMA _ matchRecogDefineItem)* 
 matchRecogDefineItem = keywordNotAllowedIdent _ AS _ expression 
 //----------------------------------------------------------------------------
 // Expression
@@ -286,9 +286,9 @@ expression = caseExpression
 caseExpression = (CASE _ whenClause+ elseClause? END)
     / (CASE _ expression _ whenClause+ elseClause? END)
     / evalOrExpression 
-evalOrExpression = evalAndExpression (OR_EXPR _ evalAndExpression)*
-evalAndExpression = bitWiseExpression (AND_EXPR _ bitWiseExpression)*
-bitWiseExpression = negatedExpression ((BAND/BOR/BXOR) negatedExpression)* 
+evalOrExpression = evalAndExpression _ (OR_EXPR _ evalAndExpression)*
+evalAndExpression = bitWiseExpression _ (AND_EXPR _ bitWiseExpression)*
+bitWiseExpression = negatedExpression _ ((BAND/BOR/BXOR) _ negatedExpression)* 
 negatedExpression = evalEqualsExpression / NOT_EXPR _ evalEqualsExpression
 evalEqualsExpression = evalRelationalExpression ( 
   (EQUALS / IS / IS _ NOT_EXPR/ SQL_NE / NOT_EQUAL) 
@@ -298,36 +298,36 @@ evalEqualsExpression = evalRelationalExpression (
 evalRelationalExpression = concatenationExpr ( 
       ( 
         ( 
-          (LT/GT/LE/GE) 
+          (LT/GT/LE/GE) _
             (
               concatenationExpr
-              / (ANY / SOME / ALL) ( (LPAREN _ expressionList? RPAREN) / subSelectGroupExpression )
+              / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
             )
         )*
       )  
-      / (NOT_EXPR)? 
+      / (NOT_EXPR)? _
       (
         // Represent the optional NOT prefix using the token type by
         // testing 'n' and setting the token type accordingly.
-        (IN_SET
-            (LPAREN / LBRACK) expression  // brackets _ are _ for _ inclusive/exclusive
+        (IN_SET _
+            (LPAREN / LBRACK) _ expression _ // brackets _ are _ for _ inclusive/exclusive
             (
-              ( COLON (expression) )    // range
+              ( COLON _ (expression) )    // range
               /
-              ( (COMMA _ expression)* )   // list of  values
+              ( (_ COMMA _ expression)* )   // list of  values
             )
             (RPAREN / RBRACK) 
           )
-        / IN_SET _ inSubSelectQuery
-        / BETWEEN _ betweenList
-        / LIKE _ concatenationExpr (ESCAPE _ stringconstant)?
-        / REGEXP _ concatenationExpr
+        / _ IN_SET _ inSubSelectQuery
+        / _ BETWEEN _ betweenList
+        / _ LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
+        / _ REGEXP _ concatenationExpr
       ) 
     )
 inSubSelectQuery = subQueryExpr
-concatenationExpr = additiveExpression ( LOR _ additiveExpression ( LOR _ additiveExpression)* )?
-additiveExpression = multiplyExpression ( (PLUS/MINUS) multiplyExpression )*
-multiplyExpression = unaryExpression ( (STAR/DIV/MOD) unaryExpression )*
+concatenationExpr = additiveExpression _ ( LOR _ additiveExpression _ ( LOR _ additiveExpression)* )?
+additiveExpression = multiplyExpression _ ( (PLUS/MINUS) _ multiplyExpression )*
+multiplyExpression = unaryExpression _ ( (STAR/DIV/MOD) _ unaryExpression )*
 unaryExpression = MINUS _ eventProperty
     / constant
     / substitution
@@ -337,33 +337,33 @@ unaryExpression = MINUS _ eventProperty
     / arrayExpression
     / rowSubSelectExpression 
     / existsSubSelectExpression
-    / NEWKW _ LCURLY _ newAssign (COMMA _ newAssign)* RCURLY
+    / NEWKW _ LCURLY _ newAssign _ (COMMA _ newAssign)* _ RCURLY
     
-chainedFunction = DOT _ libFunctionNoClass (DOT _ libFunctionNoClass)*
-newAssign = eventProperty (EQUALS _ expression)?
+chainedFunction = DOT _ libFunctionNoClass _ (DOT _ libFunctionNoClass)*
+newAssign = eventProperty _ (EQUALS _ expression)?
 rowSubSelectExpression = subQueryExpr _ chainedFunction?
 subSelectGroupExpression = subQueryExpr
 existsSubSelectExpression = EXISTS _ subQueryExpr
-subQueryExpr = LPAREN  SELECT _ DISTINCT? selectionList _ FROM _ subSelectFilterExpr (WHERE _ whereClause)? (GROUP _ BY _ groupByListExpr)? RPAREN
-subSelectFilterExpr = eventFilterExpression (DOT _ viewExpression (DOT _ viewExpression)*)? (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? (RETAINUNION/RETAININTERSECTION)?
-arrayExpression = LCURLY (expression (COMMA _ expression)* )? RCURLY _ chainedFunction?
-builtinFunc = SUM _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr? RPAREN     
-    / AVG _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr? RPAREN   
+subQueryExpr = LPAREN _ SELECT _ DISTINCT? _ selectionList _ FROM _ subSelectFilterExpr _ (WHERE _ whereClause)? _ (GROUP _ BY _ groupByListExpr)? _ RPAREN
+subSelectFilterExpr = eventFilterExpression _ (DOT _ viewExpression _ (DOT _ viewExpression)*)? _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ (RETAINUNION/RETAININTERSECTION)?
+arrayExpression = LCURLY _ (expression _ (COMMA _ expression)* )? _ RCURLY _ chainedFunction?
+builtinFunc = SUM _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN _    
+    / AVG _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN   
     / COUNT _ LPAREN
       (
-        ((ALL / DISTINCT)? expression)
+        ((ALL / DISTINCT)? _ expression)
       /
         (STAR) 
       )
-      aggregationFilterExpr? RPAREN           
-    / MEDIAN _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr? RPAREN  
-    / STDDEV _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr? RPAREN  
-    / AVEDEV _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr? RPAREN  
+      aggregationFilterExpr? _ RPAREN           
+    / MEDIAN _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
+    / STDDEV _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
+    / AVEDEV _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
     / firstLastAggregation                
     / windowAggregation               
-    / COALESCE _ LPAREN _ expression _ COMMA _ expression (COMMA _ expression)* RPAREN  
-    / PREVIOUS _ LPAREN _ expression (COMMA _ expression)? RPAREN _ chainedFunction?  
-    / PREVIOUSTAIL _ LPAREN _ expression (COMMA _ expression)? RPAREN _ chainedFunction?  
+    / COALESCE _ LPAREN _ expression _ COMMA _ expression _ (COMMA _ expression)* _ RPAREN  
+    / PREVIOUS _ LPAREN _ expression _ (COMMA _ expression)? _ RPAREN _ chainedFunction?  
+    / PREVIOUSTAIL _ LPAREN _ expression _ (COMMA _ expression)? _ RPAREN _ chainedFunction?  
     / PREVIOUSCOUNT _ LPAREN _ expression _ RPAREN          
     / PREVIOUSWINDOW _ LPAREN _ expression _ RPAREN _ chainedFunction?      
     / PRIOR _ LPAREN _ number _ COMMA _ eventProperty _ RPAREN        
@@ -371,25 +371,25 @@ builtinFunc = SUM _ LPAREN (ALL / DISTINCT)? expression _ aggregationFilterExpr?
     / GROUPING_ID _ LPAREN _ expressionList _ RPAREN          
     // MIN _ and _ MAX _ can _ also _ be "Math.min" static _ function _ and "min(price)" aggregation _ function _ and "min(a, b, c...)" built-in _ function
     // therefore _ handled _ in _ code _ via _ libFunction _ as _ below
-    / INSTANCEOF _ LPAREN _ expression _ COMMA _ classIdentifier (COMMA _ classIdentifier)* RPAREN  
+    / INSTANCEOF _ LPAREN _ expression _ COMMA _ classIdentifier _ (COMMA _ classIdentifier)* _ RPAREN  
     / TYPEOF _ LPAREN _ expression _ RPAREN             
-    / CAST _ LPAREN _ expression (COMMA / AS) classIdentifier _ RPAREN _ chainedFunction? 
+    / CAST _ LPAREN _ expression _ (COMMA / AS) _ classIdentifier _ RPAREN _ chainedFunction? 
     / EXISTS _ LPAREN _ eventProperty _ RPAREN            
-    / CURRENT_TIMESTAMP (LPAREN _ RPAREN)? chainedFunction?       
+    / CURRENT_TIMESTAMP _ (LPAREN _ RPAREN)? _ chainedFunction?       
     / ISTREAM _ LPAREN _ RPAREN               
     
-firstLastAggregation = (FIRST / LAST) LPAREN (accessAggExpr (COMMA _ expression)?)? RPAREN _ chainedFunction?
-lastAggregation = LPAREN (accessAggExpr (COMMA _ expression)?)? RPAREN _ chainedFunction?
-windowAggregation = WINDOW _ LPAREN _ accessAggExpr? RPAREN _ chainedFunction?
+firstLastAggregation = (FIRST / LAST) _ LPAREN _  (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
+lastAggregation = LPAREN _ (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
+windowAggregation = WINDOW _ LPAREN _ accessAggExpr? _ RPAREN _ chainedFunction?
 accessAggExpr = STAR
     / propertyStreamSelector
     / expression
 aggregationFilterExpr = COMMA _ expression
 eventPropertyOrLibFunction = eventProperty 
     / libFunction
-libFunction = libFunctionWithClass (DOT _ libFunctionNoClass)*
-libFunctionWithClass = (classIdentifier _ DOT)? funcIdentTop (LPAREN _ libFunctionArgs? RPAREN)?; 
-libFunctionNoClass = funcIdentChained (LPAREN _ libFunctionArgs? RPAREN)?;  
+libFunction = libFunctionWithClass _ (DOT _ libFunctionNoClass)*
+libFunctionWithClass = (classIdentifier _ DOT)? _ funcIdentTop _ (LPAREN _ libFunctionArgs? _ RPAREN)?; 
+libFunctionNoClass = funcIdentChained _ (LPAREN _ libFunctionArgs? RPAREN)?;  
 funcIdentTop = escapableIdent
     / MAX 
     / MIN
@@ -400,8 +400,8 @@ funcIdentChained = escapableIdent
     / SET 
     / AFTER 
     / BETWEEN
-libFunctionArgs = (ALL / DISTINCT)? libFunctionArgItem (COMMA _ libFunctionArgItem)*
-libFunctionArgItem = expressionLambdaDecl? expressionWithTime
+libFunctionArgs = (ALL / DISTINCT)? _ libFunctionArgItem _ (COMMA _ libFunctionArgItem)*
+libFunctionArgItem = expressionLambdaDecl? _ expressionWithTime
 betweenList = concatenationExpr _ AND_EXPR _ concatenationExpr;
 //----------------------------------------------------------------------------
 // Pattern event expressions / event pattern operators
@@ -414,7 +414,7 @@ followedByExpression = or:orExpression _ followed:(followedByRepeat)*
 {
   return {"or": or, "followed-by": followed};
 }
-followedByRepeat = first:( FOLLOWED_BY /  ( FOLLOWMAX_BEGIN _ expression _ FOLLOWMAX_END)) last:orExpression 
+followedByRepeat = first:( FOLLOWED_BY /  ( FOLLOWMAX_BEGIN _ expression _ FOLLOWMAX_END)) _ last:orExpression 
 orExpression = and:andExpression rest:( OR_EXPR _ andExpression)*
 {
   rest = rest.map(function(e) {return e[1];});
@@ -431,7 +431,7 @@ matchUntilExpression = range:matchUntilRange? _ qual:qualifyExpression _ until:(
   until = until === null? null : until[1];
   return {"range": range, "qualify": qual, "until": until };
 }
-qualifyExpression = first:(( EVERY_EXPR /   NOT_EXPR /   EVERY_DISTINCT_EXPR _ distinctExpressionList) _ matchUntilRange? )? guard:guardPostFix 
+qualifyExpression = first:(( EVERY_EXPR /   NOT_EXPR /   EVERY_DISTINCT_EXPR _ distinctExpressionList) _ matchUntilRange? )? _ guard:guardPostFix 
 {
   var partOne, partTwo, operator;
   if(first !== null){
@@ -454,36 +454,36 @@ atomicExpression = obs:observerExpression /  pattern:patternFilterExpression
   if(typeof obs === 'undefined') { var obs = null;}
   return {"type":"atomic", "observer": obs, "patternFilter": pattern };
 }
-observerExpression = patternKeywordNotAllowedIdent _ COLON _ ( patternKeywordNotAllowedIdent /   AT) _ LPAREN _ expressionWithTimeList? RPAREN
-guardWhereExpression = patternKeywordNotAllowedIdent _ COLON _ patternKeywordNotAllowedIdent _ LPAREN (expressionWithTimeList)? RPAREN
+observerExpression = patternKeywordNotAllowedIdent _ COLON _ ( patternKeywordNotAllowedIdent /   AT) _ LPAREN _ expressionWithTimeList? _ RPAREN
+guardWhereExpression = patternKeywordNotAllowedIdent _ COLON _ patternKeywordNotAllowedIdent _ LPAREN _ (expressionWithTimeList)? _ RPAREN
 guardWhileExpression = LPAREN _ expression _ RPAREN
 // syntax _ is [a:b] or [:b] or [a:] or [a]
-matchUntilRange = LBRACK _ ( expression ( COLON _ expression?)? /  COLON _ expression) _ RBRACK
+matchUntilRange = LBRACK _ ( expression _ ( COLON _ expression?)? /  COLON _ expression) _ RBRACK
 //----------------------------------------------------------------------------
 // Filter expressions
 //   Operators are the usual bunch =, <, >, =<, >= 
 //   Ranges such as 'property in [a,b]' are allowed and ([ and )] distinguish open/closed range endpoints
 //----------------------------------------------------------------------------
-eventFilterExpression = (keywordNotAllowedIdent _ EQUALS)? classIdentifier (LPAREN _ expressionList? RPAREN)? propertyExpression?
-propertyExpression = propertyExpressionAtomic (propertyExpressionAtomic)*
-propertyExpressionAtomic = LBRACK _ propertyExpressionSelect? expression _ propertyExpressionAnnotation? (AS _ keywordNotAllowedIdent)? (WHERE _ expression)? RBRACK
+eventFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? _ RPAREN)? _ propertyExpression?
+propertyExpression = propertyExpressionAtomic _ (propertyExpressionAtomic)*
+propertyExpressionAtomic = LBRACK _ propertyExpressionSelect? _ expression _ propertyExpressionAnnotation? _ (AS _ keywordNotAllowedIdent)? _ (WHERE _ expression)? _ RBRACK
 propertyExpressionSelect = SELECT _ propertySelectionList _ FROM
-propertyExpressionAnnotation = ATCHAR _ keywordNotAllowedIdent (LPAREN _ keywordNotAllowedIdent _ RPAREN)
-propertySelectionList = propertySelectionListElement (COMMA _ propertySelectionListElement)*
+propertyExpressionAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ keywordNotAllowedIdent _ RPAREN)
+propertySelectionList = propertySelectionListElement (_ COMMA _ propertySelectionListElement)*
 propertySelectionListElement = STAR
   / propertyStreamSelector
-  / expression (AS _ IDENT)?
-propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (AS _ keywordNotAllowedIdent)?
-patternFilterExpression = (keywordNotAllowedIdent _ EQUALS)? classIdentifier (LPAREN _ expressionList? RPAREN)? propertyExpression? patternFilterAnnotation?
-patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent (LPAREN _ number _ RPAREN)?
-classIdentifier = first:escapableStr rest:(DOT _ escapableStr)* 
+  / expression (_ AS _ IDENT)?
+propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (_ AS _ keywordNotAllowedIdent)?
+patternFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? RPAREN)? _ propertyExpression? _ patternFilterAnnotation?
+patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ RPAREN)?
+classIdentifier = first:escapableStr _ rest:(DOT _ escapableStr)* 
   { 
     var fullClassName = first + stringFromArray(rest);
     return {"type": "classIdentifier", "name": fullClassName};
   }
-classIdentifierNonGreedy = escapableStr (DOT _ escapableStr)*
-expressionList = expression (COMMA _ expression)*
-expressionWithTimeList = expressionWithTimeInclLast (COMMA _ expressionWithTimeInclLast)*
+classIdentifierNonGreedy = escapableStr _ (DOT _ escapableStr)*
+expressionList = expression _ (COMMA _ expression)*
+expressionWithTimeList = expressionWithTimeInclLast _ (COMMA _ expressionWithTimeInclLast)*
 expressionWithTime = lastWeekdayOperand
   / timePeriod
   / expressionQualifyable
@@ -494,22 +494,22 @@ expressionWithTime = lastWeekdayOperand
   / numericParameterList
   / numberSetStar
 expressionWithTimeInclLast = lastOperand / expressionWithTime
-expressionQualifyable = expression (ASC / DESC / TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC)?
+expressionQualifyable = expression _ (ASC / DESC / TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC)?
 numberSetStar = STAR
 lastWeekdayOperand = LW
 lastOperand = LAST
-frequencyOperand = STAR _ DIV (number / keywordNotAllowedIdent / substitution)
-rangeOperand = (number / keywordNotAllowedIdent / substitution) COLON (number / keywordNotAllowedIdent / substitution)
-lastOperator = (number / keywordNotAllowedIdent / substitution) LAST
-weekDayOperator = (number / keywordNotAllowedIdent /substitution) WEEKDAY
-numericParameterList = LBRACK _ numericListParameter (COMMA _ numericListParameter)* RBRACK
+frequencyOperand = STAR _ DIV _ (number / keywordNotAllowedIdent / substitution)
+rangeOperand = (number / keywordNotAllowedIdent / substitution) _ COLON _ (number / keywordNotAllowedIdent / substitution)
+lastOperator = (number / keywordNotAllowedIdent / substitution) _ LAST
+weekDayOperator = (number / keywordNotAllowedIdent /substitution) _ WEEKDAY
+numericParameterList = LBRACK _ numericListParameter _ (COMMA _ numericListParameter)* _ RBRACK
 numericListParameter = rangeOperand
   / frequencyOperand
   / numberconstant  
-eventProperty = eventPropertyAtomic (DOT _ eventPropertyAtomic)*
- eventPropertyAtomic = eventPropertyIdent ( LBRACK _ number _ RBRACK (QUESTION)? /
-      LPAREN (STRING_LITERAL / QUOTED_STRING_LITERAL) RPAREN (QUESTION)? / QUESTION)?
-eventPropertyIdent = IDENT (ESCAPECHAR _ DOT _ IDENT?)*
+eventProperty = eventPropertyAtomic (_ DOT _ eventPropertyAtomic)*
+ eventPropertyAtomic = eventPropertyIdent _ ( LBRACK _ number _ RBRACK _ (QUESTION)? /
+      LPAREN _ (STRING_LITERAL / QUOTED_STRING_LITERAL) _ RPAREN _ (QUESTION)? / QUESTION)?
+eventPropertyIdent = IDENT _ (ESCAPECHAR _ DOT _ IDENT?)*
 keywordNotAllowedIdent = kw:(!keywords / keywords ) id:IDENT 
   {
     if(kw === undefined){ kw = "";}
@@ -588,27 +588,27 @@ keywords =
 
 escapableStr = allKeywordsNotAllowedIntent / EVENTS / TICKED_STRING_LITERAL
 escapableIdent = keywordNotAllowedIdent / TICKED_STRING_LITERAL
-timePeriod = (  yearPart _ monthPart? weekPart? dayPart? hourPart? minutePart? secondPart? millisecondPart?
-    / monthPart _ weekPart? dayPart? hourPart? minutePart? secondPart? millisecondPart?
-    / weekPart _ dayPart? hourPart? minutePart? secondPart? millisecondPart?
-    / dayPart _ hourPart? minutePart? secondPart? millisecondPart?
-    / hourPart _ minutePart? secondPart? millisecondPart?
-    / minutePart _ secondPart? millisecondPart?
+timePeriod = (  yearPart _ monthPart? _ weekPart? _ dayPart? _ hourPart? _ minutePart? _ secondPart? _ millisecondPart?
+    / monthPart _ weekPart? _ dayPart? _ hourPart? _ minutePart? _ secondPart? _ millisecondPart?
+    / weekPart _ dayPart? _ hourPart? _ minutePart? _ secondPart? _ millisecondPart?
+    / dayPart _ hourPart? _ minutePart? _ secondPart? _ millisecondPart?
+    / hourPart _ minutePart? _ secondPart? _ millisecondPart?
+    / minutePart _ secondPart? _ millisecondPart?
     / secondPart _ millisecondPart?
     / millisecondPart
     )
-yearPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_YEARS / TIMEPERIOD_YEAR)
-monthPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_MONTHS / TIMEPERIOD_MONTH)
-weekPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_WEEKS / TIMEPERIOD_WEEK)
-dayPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_DAYS / TIMEPERIOD_DAY)
-hourPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_HOURS / TIMEPERIOD_HOUR)
-minutePart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_MINUTES / TIMEPERIOD_MINUTE / MIN)
-secondPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC) 
-millisecondPart = (numberconstant/keywordNotAllowedIdent/substitution) (TIMEPERIOD_MILLISECONDS / TIMEPERIOD_MILLISECOND / TIMEPERIOD_MILLISEC) 
+yearPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_YEARS / TIMEPERIOD_YEAR)
+monthPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MONTHS / TIMEPERIOD_MONTH)
+weekPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_WEEKS / TIMEPERIOD_WEEK)
+dayPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_DAYS / TIMEPERIOD_DAY)
+hourPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_HOURS / TIMEPERIOD_HOUR)
+minutePart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MINUTES / TIMEPERIOD_MINUTE / MIN)
+secondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC) 
+millisecondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MILLISECONDS / TIMEPERIOD_MILLISECOND / TIMEPERIOD_MILLISEC) 
 number = IntegerLiteral / FloatingPointLiteral
 substitution = QUESTION
 constant = numberconstant / stringconstant / BOOLEAN_TRUE / BOOLEAN_FALSE / VALUE_NULL
-numberconstant = (MINUS / PLUS)? number
+numberconstant = (MINUS / PLUS)? _ number
 stringconstant = STRING_LITERAL / QUOTED_STRING_LITERAL
 // JSON
 jsonvalue = constant 
@@ -616,8 +616,8 @@ jsonvalue = constant
     / jsonarray
 jsonobject = LCURLY _ jsonmembers _ RCURLY
 jsonarray = LBRACK _ jsonelements? RBRACK
-jsonelements = jsonvalue (COMMA _ jsonvalue)* (COMMA)?
-jsonmembers = jsonpair (COMMA _ jsonpair)* (COMMA)?   
+jsonelements = jsonvalue (_ COMMA _ jsonvalue)* _ (COMMA)?
+jsonmembers = jsonpair (_ COMMA _ jsonpair)* _ (COMMA)?   
 jsonpair = (stringconstant / IDENT) COLON _ jsonvalue
 // Tokens
 TOKENS = 
