@@ -432,18 +432,18 @@ builtinFunc =
   / previousFunction
   / previousTailFunction
   / previousCountFunction          
-  / (PREVIOUSWINDOW _ LPAREN _ expression _ RPAREN _ chainedFunction?)      
-  / (PRIOR _ LPAREN _ number _ COMMA _ eventProperty _ RPAREN)
-  / (GROUPING _ LPAREN _ expression _ RPAREN )
-  / (GROUPING_ID _ LPAREN _ expressionList _ RPAREN )
+  / previousWindowFunction     
+  / priorFunction
+  / groupingFunction
+  / groupingIDFunction
   // MIN and MAX can also be "Math.min" static function and "min(price)" aggregation function and "min(a, b, c...)" built-in function
   // therefore handled in code via libFunction as below
-  / (INSTANCEOF _ LPAREN _ expression _ COMMA _ classIdentifier _ (COMMA _ classIdentifier)* _ RPAREN)
-  / (TYPEOF _ LPAREN _ expression _ RPAREN)
-  / (CAST _ LPAREN _ expression _ (COMMA / AS) _ classIdentifier _ RPAREN _ chainedFunction? )
-  / (EXISTS _ LPAREN _ eventProperty _ RPAREN )
-  / (CURRENT_TIMESTAMP _ (LPAREN _ RPAREN)? _ chainedFunction? )
-  / (ISTREAM _ LPAREN _ RPAREN )
+  / instanceOfFunction
+  / typeofFunction
+  / castFunction
+  / existsFunction
+  / timestampFunction
+  / istreamFunction
   
 
 avgFunction = AVG _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ aggregator:aggregationFilterExpr? _ RPAREN
@@ -506,7 +506,6 @@ avedevFunction = AVEDEV _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expressio
     "aggregator": agg
   };
 }
-
 coalesceFunction = COALESCE _ LPAREN _ first:expression _ COMMA _ second:expression _ rest:(COMMA _ expression)* _ RPAREN
 {
   var arr = [first, second];
@@ -519,7 +518,6 @@ coalesceFunction = COALESCE _ LPAREN _ first:expression _ COMMA _ second:express
     "parameters": flattenArray(arr.concat(rest))
   };  
 }
-
 previousFunction = PREVIOUS _ LPAREN _ exp:expression _ property:(COMMA _ expression)? _ RPAREN _ chained:chainedFunction?
 {
   return {
@@ -530,7 +528,6 @@ previousFunction = PREVIOUS _ LPAREN _ exp:expression _ property:(COMMA _ expres
     "chainedFunction": chained
   };  
 }
-
 previousTailFunction = PREVIOUSTAIL _ LPAREN _ exp:expression _ property:(COMMA _ expression)? _ RPAREN _ chained:chainedFunction?
 {
   return {
@@ -541,7 +538,6 @@ previousTailFunction = PREVIOUSTAIL _ LPAREN _ exp:expression _ property:(COMMA 
     "chainedFunction": chained
   };  
 }
-
 previousCountFunction = PREVIOUSCOUNT _ LPAREN _ exp:expression _ RPAREN
 {
   return {
@@ -550,7 +546,92 @@ previousCountFunction = PREVIOUSCOUNT _ LPAREN _ exp:expression _ RPAREN
     "parameter": exp,
   };   
 } 
-
+previousWindowFunction = PREVIOUSWINDOW _ LPAREN _ exp:expression _ RPAREN _ chained:chainedFunction?
+{
+  return {
+    "type": "function", 
+    "name": "prevwindow",
+    "parameter": exp,
+    "chainedFunction": chained
+  };  
+}
+priorFunction = PRIOR _ LPAREN _ num:number _ COMMA _ prop:eventProperty _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "prior",
+    "number": num,
+    "eventProperty": prop 
+  };
+}
+groupingFunction = GROUPING _ LPAREN _ exp:expression _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "grouping",
+    "parameter": exp
+  };
+}
+groupingIDFunction = GROUPING_ID _ LPAREN _ expr:expressionList _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "grouping_id",
+    "parameters": exp
+  };
+}
+instanceOfFunction = INSTANCEOF _ LPAREN _ expr:expression _ COMMA _ type:classIdentifier _ moretypes:(COMMA _ classIdentifier)* _ RPAREN
+{
+  moretypes = moretypes.map(function(e) {return e[2];})
+  moretypes.unshift(type);
+  return {
+    "type": "function", 
+    "name": "instanceof",
+    "expression": expr,
+    "types": moretypes
+  };
+}
+typeofFunction = TYPEOF _ LPAREN _ exp:expression _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "typeof",
+    "expression": exp
+  }; 
+}
+castFunction = CAST _ LPAREN _ exp:expression _ (COMMA / AS) _ type:classIdentifier _ RPAREN _ chained:chainedFunction?
+{
+  return {
+    "type": "function", 
+    "name": "cast",
+    "expression": exp,
+    "type":type,
+    "chainedFunction": chained
+  };   
+}
+existsFunction = EXISTS _ LPAREN _ property:eventProperty _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "exists",
+    "property": property
+  };   
+}
+timestampFunction = CURRENT_TIMESTAMP _ (LPAREN _ RPAREN)? _ chained:chainedFunction?
+{
+  return {
+    "type": "function", 
+    "name": "current_timestamp",
+    "chainedFunction": chained
+  };     
+}
+istreamFunction = ISTREAM _ LPAREN _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "istream"
+  }; 
+}
 firstLastAggregation = (FIRST / LAST) _ LPAREN _  (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
 lastAggregation = LPAREN _ (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
 windowAggregation = WINDOW _ LPAREN _ accessAggExpr? _ RPAREN _ chainedFunction?
@@ -654,10 +735,10 @@ propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (_ AS _ keywordNotA
 patternFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? RPAREN)? _ propertyExpression? _ patternFilterAnnotation?
 patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ RPAREN)?
 classIdentifier = first:escapableStr rest:(DOT escapableStr)* 
-  { 
-    var fullClassName = first + stringFromArray(rest);
-    return {"type": "classIdentifier", "name": fullClassName};
-  }
+{ 
+  var fullClassName = first + stringFromArray(flattenArray(rest));
+  return {"type": "classIdentifier", "name": fullClassName};
+}
 classIdentifierNonGreedy = escapableStr _ (DOT _ escapableStr)*
 expressionList = first:expression  rest:(_ COMMA _ expression)*
 {
@@ -687,8 +768,13 @@ numericParameterList = LBRACK _ numericListParameter _ (COMMA _ numericListParam
 numericListParameter = rangeOperand
   / frequencyOperand
   / numberconstant  
-eventProperty = eventPropertyAtomic (_ DOT _ eventPropertyAtomic)*
- eventPropertyAtomic = eventPropertyIdent _ ( LBRACK _ number _ RBRACK _ (QUESTION)? /
+eventProperty = first:eventPropertyAtomic rest:(_ DOT _ eventPropertyAtomic)*
+{
+  rest.unshift(first);
+  return flattenArray(rest);
+}
+
+eventPropertyAtomic = eventPropertyIdent _ ( LBRACK _ number _ RBRACK _ (QUESTION)? /
       LPAREN _ (STRING_LITERAL / QUOTED_STRING_LITERAL) _ RPAREN _ (QUESTION)? / QUESTION)?
 eventPropertyIdent = allKeywordsNotAllowedIntent _ (ESCAPECHAR _ DOT _ allKeywordsNotAllowedIntent?)*
 keywordNotAllowedIdent = kw:(!keywords / keywords ) id:IDENT 
@@ -767,7 +853,7 @@ keywords =
     / CONTEXT
     / FOR
     / USING
-
+    / PRIOR
 
 escapableStr = allKeywordsNotAllowedIntent / EVENTS / TICKED_STRING_LITERAL
 escapableIdent = keywordNotAllowedIdent / TICKED_STRING_LITERAL
@@ -788,7 +874,7 @@ hourPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_HO
 minutePart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MINUTES / TIMEPERIOD_MINUTE / MIN)
 secondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC) 
 millisecondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MILLISECONDS / TIMEPERIOD_MILLISECOND / TIMEPERIOD_MILLISEC) 
-number = IntegerLiteral / FloatingPointLiteral
+number = num:(IntegerLiteral / FloatingPointLiteral) { return flattenArray(num); }
 substitution = QUESTION
 constant = numberconstant / stringconstant / BOOLEAN_TRUE / BOOLEAN_FALSE / VALUE_NULL
 numberconstant = (MINUS / PLUS)? _ number
@@ -1002,10 +1088,7 @@ IDENT = first:( [a-zA-Z] / '_' / '$') rest:( [a-zA-Z] / '_' / [0-9]  / '$')*
 { 
   return first + stringFromArray(rest);
 }
-IntegerLiteral = DecimalIntegerLiteral 
-  / HexIntegerLiteral 
-  / OctalIntegerLiteral 
-  / BinaryIntegerLiteral
+IntegerLiteral = DecimalIntegerLiteral / HexIntegerLiteral / OctalIntegerLiteral / BinaryIntegerLiteral
 FloatingPointLiteral = DecimalFloatingPointLiteral / HexadecimalFloatingPointLiteral
 OctalEscape = '\\' ([0-3] [0-7] [0-7] / [0-7] [0-7] / [0-7])
 UnicodeEscape = '\\' 'u' HexDigit _ HexDigit _ HexDigit _ HexDigit              
