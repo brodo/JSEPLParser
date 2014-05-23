@@ -5,10 +5,27 @@
   function stringFromArray(arr) {
     return arr.reduce(function(x,y){return x+y;}, "");
   }
-  
+  function isEmptyArray(arr){
+    return arr instanceof Array && arr.length === 0;
+  }
+  function flattenArray(arr){
+    if(!(arr instanceof Array)) return arr;
+    arr = filterArray(arr);
+    arr = arr.map(flattenArray);
+    if(arr.length === 1) arr = arr[0];
+    return arr;
+  }
+  function isInterestingValue(val){
+    return val !== null && val !== "" && val !== " " && !isEmptyArray(val);
+  }
+
+  function filterArray(arr){
+    return arr.filter(isInterestingValue)
+  }
+
 }
 
-start = startEPLExpressionRule
+start = startEPLExpressionRule / startPatternExpressionRule
 
 //----------------------------------------------------------------------------
 // Start _ Rules
@@ -19,7 +36,7 @@ startPatternExpressionRule = prefix:(annotationEnum / expressionDecl)* _ pattern
   }
 startEPLExpressionRule = prefix:(annotationEnum / expressionDecl)* _ expression:eplExpression
   {
-    return {"prefix": prefix ,"expression": expression}
+    return {"prefix": prefix ,"body": expression}
   }
 startEventPropertyRule = eventProperty
 startJsonValueRule = jsonvalue
@@ -81,16 +98,28 @@ eplExpression = context:contextExpr? _
 contextExpr = CONTEXT _ keywordNotAllowedIdent
 selectExpr = (INSERT _ insertIntoExpr)? 
     _ SELECT _ sel:selectClause
-    _ FROM _ from:fromClause?
-    _ matchRecog?
-    (_ WHERE _ whereClause)?
-    (_ GROUP _ BY _ groupByListExpr)? 
-    (_ HAVING _ havingClause)?
-    (_ OUTPUT _ outputLimit)?
-    (_ ORDER _ BY _ orderByListExpr)?
-    (_ ROW_LIMIT_EXPR _ rowLimit)?
+    from:(_ FROM _ fromClause)?
+    _ match:matchRecog?
+    where:(_ WHERE _ whereClause)?
+    group:(_ GROUP _ BY _ groupByListExpr)? 
+    having:(_ HAVING _ havingClause)?
+    output:(_ OUTPUT _ outputLimit)?
+    orderBy:(_ ORDER _ BY _ orderByListExpr)?
+    rowLimit:(_ ROW_LIMIT_EXPR _ rowLimit)?
     {
-      return {"type": "select", "attributes": sel, "from": from}
+      from = (from instanceof Array)? from[3] : from;
+      return {
+        "type": "select", 
+        "attributes": sel, 
+        "from": from,
+        "match": match,
+        "where": flattenArray(where),
+        "group": flattenArray(group),
+        "having": flattenArray(having),
+        "output": flattenArray(output),
+        "orderBy": flattenArray(orderBy),
+        "rowLimit": flattenArray(rowLimit)
+      }
     }
 
 onExpr = ON _ onStreamExpr _ (onDeleteExpr / onSelectExpr _ (onSelectInsertExpr+ _ outputClauseInsert?)? / onSetExpr / onUpdateExpr / onMergeExpr)
@@ -179,7 +208,8 @@ insertIntoExpr = (ISTREAM / RSTREAM / IRSTREAM)? _ INTO _ classIdentifier _ (LPA
 columnList = keywordNotAllowedIdent _ (COMMA _ keywordNotAllowedIdent)*
 fromClause = stream:streamExpression _ join:(regularJoin / outerJoinList)
 {
-  return {"stream": stream, "join": join};
+  stream.join = join;
+  return stream;
 }
 regularJoin = (COMMA _ streamExpression)*
 outerJoinList = outerJoin _ (outerJoin)*
@@ -188,49 +218,63 @@ outerJoinIdent = ON _ outerJoinIdentPair _ (AND_EXPR _ outerJoinIdentPair)*
 outerJoinIdentPair = eventProperty _ EQUALS _ eventProperty 
 whereClause = evalOrExpression
 selectClause = _ stream:(RSTREAM / ISTREAM / IRSTREAM)? _ d:DISTINCT? _ list:selectionList
-  {
-    var isDistinct = (d !== null);
-    return {"type": "selections" , "isDistinct": isDistinct, "streamType": stream, "selectionList": list}
-  }
-selectionList = first:selectionListElement _ rest:(COMMA _ selectionListElement)*
-  {
-    rest = rest.map(function(e){return e[2]});
-    rest.unshift(first)
-    return rest;
-  }
-selectionListElement = element:(STAR / streamSelector / selectionListElementExpr)
-  {
-    return element; 
-  }
-selectionListElementExpr = exp:expression _ ann:selectionListElementAnno? _ (AS? _ IDENT)?
 {
-  return {"type": "selectionListElementExpr", "expression": exp, "annotation": ann};
+  var isDistinct = (d !== null);
+  return {"type": "selections" , "isDistinct": isDistinct, "streamType": stream, "selectionList": list}
+}
+selectionList = first:selectionListElement rest:(_ COMMA _ selectionListElement)*
+{
+  rest = rest.map(function(e){return e[2]});
+  rest.unshift(first)
+  return rest;
+}
+selectionListElement = element:(STAR / streamSelector / selectionListElementExpr)
+{
+  return element; 
+}
+selectionListElementExpr = exp:expression _ ann:selectionListElementAnno? _ (AS? _ allKeywordsNotAllowedIntent)?
+{
+  return {"type": "selectionListElement", "element": flattenArray(exp), "annotation": ann};
 }
 selectionListElementAnno = ATCHAR _ keywordNotAllowedIdent
-streamSelector = ident:keywordNotAllowedIdent (DOT STAR)? _ as:(AS _ keywordNotAllowedIdent)?
+streamSelector = ident:allKeywordsNotAllowedIntent (DOT STAR)? _ as:(AS _ allKeywordsNotAllowedIntent)?
 {
-  return {"type": "streamSelector", "ident": ident}
+  var asident = as === null ? null : as[1]
+  return {"type": "streamSelector", "identifier": ident, "as": asident};
 }
 streamExpression = exp:(eventFilterExpression / patternInclusionExpression / databaseJoinExpression / methodJoinExpression ) _
-    view:(DOT _ viewExpression _ (DOT _ viewExpression)*)? _ as:(AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
-    {
-      var isUnidirectional = (uni !== null),
-        shouldRetain = (retain !== null);
-      return {
-        "expression": exp,
-        "view": view,
-        "as": as,
-        "isUnidirectional": isUnidirectional,
-        "shouldRetain": shouldRetain
-      };
-    }
+  view:(DOT _ viewExpression _ (DOT _ viewExpression)*)? _ as:(AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
+{
+  var isUnidirectional = (uni !== null),
+    shouldRetain = (retain !== null);
+  if(view !== null){
+    var firstView = view[2];
+    var restViewsArray = view[4];
+    restViewsArray.unshift(firstView)
+    view = restViewsArray;
+  }
+  return {
+    "stream": exp,
+    "view": view,
+    "as": as,
+    "isUnidirectional": isUnidirectional,
+    "shouldRetain": shouldRetain
+  };
+}
 forExpr = FOR _ keywordNotAllowedIdent _ (LPAREN _ expressionList? _ RPAREN)?
 patternInclusionExpression = PATTERN _ ann:annotationEnum* _ LBRACK _ expr:patternExpression _ RBRACK {
-  return {"annotation": ann, "expression": expr};
+  return {"annotation": ann, "pattern": expr};
 }
 databaseJoinExpression = SQL _ COLON _ keywordNotAllowedIdent _ LBRACK (STRING_LITERAL / QUOTED_STRING_LITERAL) _ (METADATASQL _ (STRING_LITERAL / QUOTED_STRING_LITERAL))? _ RBRACK; 
 methodJoinExpression = keywordNotAllowedIdent _ COLON _ classIdentifier _ (LPAREN _ expressionList? RPAREN)?
-viewExpression = keywordNotAllowedIdent _ COLON (keywordNotAllowedIdent/MERGE) _ LPAREN _ expressionWithTimeList? _ RPAREN
+viewExpression = nameSpace:keywordNotAllowedIdent COLON name:(IDENT/MERGE) _ LPAREN _ expr:expressionWithTimeList? _ RPAREN
+{
+  return {
+    "namespace": nameSpace,
+    "name": name,
+    "parameter": flattenArray(expr)
+  };
+}
 groupByListExpr = groupByListChoice _ (COMMA _ groupByListChoice)*
 groupByListChoice = expression / groupByCubeOrRollup / groupByGroupingSets
 groupByCubeOrRollup = (CUBE / ROLLUP) _ LPAREN _ groupByCombinableExpr _ (COMMA _ groupByCombinableExpr)* _ RPAREN
@@ -245,7 +289,7 @@ outputLimit = outputLimitAfter? _ (ALL/FIRST/LAST/SNAPSHOT)?
     ( _ EVERY_EXPR _ ( timePeriod / (number / keywordNotAllowedIdent) _ (EVENTS)))
     / ( _ AT _ crontabLimitParameterSet)
     / ( _ WHEN _ expression (_ THEN _ onSetExpr)? )
-    / ( _ WHEN _ TERMINATED (_ AND_EXPR _ expression)? (_THEN _ onSetExpr)? )
+    / ( _ WHEN _ TERMINATED (_ AND_EXPR _ expression)? _ ( THEN _ onSetExpr)? )
   ) outputLimitAndTerm?
 outputLimitAndTerm = AND_EXPR _ WHEN _ TERMINATED _ (AND_EXPR _ expression)? _ (THEN _ onSetExpr)?
 outputLimitAfter = AFTER _ (timePeriod / number _ EVENTS)  
@@ -270,7 +314,7 @@ matchRecogMeasures = MEASURES _ matchRecogMeasureItem _ (COMMA _ matchRecogMeasu
 matchRecogMeasureItem = expression _ (AS (keywordNotAllowedIdent)? )?
 matchRecogMatchesSelection = ALL _ MATCHES
 matchRecogPattern = PATTERN _ LPAREN _ matchRecogPatternAlteration _ RPAREN
-matchRecogMatchesAfterSkip = AFTER _ IDENT _ IDENT _ IDENT _ IDENT _ IDENT
+matchRecogMatchesAfterSkip = AFTER _ keywordNotAllowedIdent _ keywordNotAllowedIdent _ keywordNotAllowedIdent _ keywordNotAllowedIdent _ keywordNotAllowedIdent
 matchRecogMatchesInterval = keywordNotAllowedIdent _ timePeriod (OR_EXPR _ TERMINATED)?
 matchRecogPatternAlteration = matchRecogPatternConcat _ (BOR _ matchRecogPatternConcat)* 
 matchRecogPatternConcat = matchRecogPatternUnary+ 
@@ -282,64 +326,92 @@ matchRecogDefineItem = keywordNotAllowedIdent _ AS _ expression
 //----------------------------------------------------------------------------
 // Expression
 //----------------------------------------------------------------------------
-expression = caseExpression    
-caseExpression = (CASE _ whenClause+ elseClause? END)
-    / (CASE _ expression _ whenClause+ elseClause? END)
-    / evalOrExpression 
-evalOrExpression = evalAndExpression _ (OR_EXPR _ evalAndExpression)*
-evalAndExpression = bitWiseExpression _ (AND_EXPR _ bitWiseExpression)*
-bitWiseExpression = negatedExpression _ ((BAND/BOR/BXOR) _ negatedExpression)* 
+expression = ce:caseExpression {
+  return flattenArray(ce);
+}
+caseExpression = (CASE _ whenClause+ _ elseClause? _ END)
+  / (CASE _ expression _ whenClause+ _ elseClause? _ END)
+  / evalOrExpression
+
+evalOrExpression = ev:evalAndExpression _ orexp:(OR_EXPR _ evalAndExpression)*
+{
+  return (typeof orexp === 'undefined' || orexp === null || isEmptyArray(orexp)) ? ev : {"andExpression": ev, "or": orexp};
+}
+evalAndExpression = bw:bitWiseExpression  andexp:(_ AND_EXPR _ bitWiseExpression)*
+{
+  return (typeof andexp === 'undefined' || andexp === null || isEmptyArray(andexp))? bw : {"bitWiseExpression": bw, "and": andexp};
+}
+bitWiseExpression = first:negatedExpression rest:(_ (BAND/BOR/BXOR) _ negatedExpression)*
+{
+  rest.unshift(first);
+  return rest;
+} 
 negatedExpression = evalEqualsExpression / NOT_EXPR _ evalEqualsExpression
-evalEqualsExpression = evalRelationalExpression ( 
-  (EQUALS / IS / IS _ NOT_EXPR/ SQL_NE / NOT_EQUAL) 
-  ( evalRelationalExpression / (ANY / SOME / ALL)
-  ((LPAREN _ expressionList? RPAREN) / subSelectGroupExpression ) )
+evalEqualsExpression = evalRelationalExpression  
+  ( _ 
+    (EQUALS / IS / IS _ NOT_EXPR/ SQL_NE / NOT_EQUAL) _ 
+    ( evalRelationalExpression / (ANY / SOME / ALL) _
+    ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression ) )
   )*
-evalRelationalExpression = concatenationExpr ( 
-      ( 
-        ( 
-          (LT/GT/LE/GE) _
-            (
-              concatenationExpr
-              / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
-            )
-        )*
-      )  
-      / (NOT_EXPR)? _
+
+evalRelationalExpression = concatenationExpr _  
+  ( 
+    (LT/GT/LE/GE) _
       (
-        // Represent the optional NOT prefix using the token type by
-        // testing 'n' and setting the token type accordingly.
-        (IN_SET _
-            (LPAREN / LBRACK) _ expression _ // brackets _ are _ for _ inclusive/exclusive
-            (
-              ( COLON _ (expression) )    // range
-              /
-              ( (_ COMMA _ expression)* )   // list of  values
-            )
-            (RPAREN / RBRACK) 
-          )
-        / _ IN_SET _ inSubSelectQuery
-        / _ BETWEEN _ betweenList
-        / _ LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
-        / _ REGEXP _ concatenationExpr
-      ) 
+        concatenationExpr
+        / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
+      )
+  )* 
+  / (_ NOT_EXPR _ )? 
+  (
+    // Represent the optional NOT prefix using the token type by
+    // testing 'n' and setting the token type accordingly.
+    (_ IN_SET _
+        (LPAREN / LBRACK) _ expression _ // brackets are for inclusive/exclusive
+        (
+          ( COLON _ expression )    // range
+          /
+          ( COMMA _ expression )*   // list of  values
+        )
+        (RPAREN / RBRACK) 
     )
+    / _ IN_SET _ inSubSelectQuery
+    / _ BETWEEN _ betweenList
+    / _ LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
+    / _ REGEXP _ concatenationExpr
+  )
+
+
 inSubSelectQuery = subQueryExpr
-concatenationExpr = additiveExpression _ ( LOR _ additiveExpression _ ( LOR _ additiveExpression)* )?
-additiveExpression = multiplyExpression _ ( (PLUS/MINUS) _ multiplyExpression )*
-multiplyExpression = unaryExpression _ ( (STAR/DIV/MOD) _ unaryExpression )*
-unaryExpression = MINUS _ eventProperty
-    / constant
-    / substitution
-    / LPAREN _ expression _ RPAREN _ chainedFunction?
-    / eventPropertyOrLibFunction
-    / builtinFunc
-    / arrayExpression
-    / rowSubSelectExpression 
-    / existsSubSelectExpression
-    / NEWKW _ LCURLY _ newAssign _ (COMMA _ newAssign)* _ RCURLY
-    
-chainedFunction = DOT _ libFunctionNoClass _ (DOT _ libFunctionNoClass)*
+concatenationExpr = additiveExpression _ ( LOR _ additiveExpression (_ LOR _ additiveExpression)* )?
+additiveExpression = multiplyExpression ( _ (PLUS/MINUS) _ multiplyExpression )*
+multiplyExpression = first:unaryExpression _ rest:( _ (STAR/DIV/MOD) _ unaryExpression )*
+{
+  if(typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
+    return first;
+  } 
+  else {
+    return {"leftOperand":first, "operator":rest[0], "rightOperand":rest[1]};
+  }
+}
+unaryExpression = 
+    (MINUS _ eventProperty)
+  / constant
+  / substitution
+  / (LPAREN _ expression _ RPAREN _ chainedFunction?)
+  / eventPropertyOrLibFunction
+  / builtinFunc
+  / arrayExpression
+  / rowSubSelectExpression 
+  / existsSubSelectExpression
+  / (NEWKW _ LCURLY _ newAssign  (_ COMMA _ newAssign)* _ RCURLY)
+
+chainedFunction = DOT _ first:libFunctionNoClass _ rest:(DOT _ libFunctionNoClass)*
+{
+  rest = rest.map(function(f) {return f[2];});
+  rest.unshift(first);
+  return rest;
+}
 newAssign = eventProperty _ (EQUALS _ expression)?
 rowSubSelectExpression = subQueryExpr _ chainedFunction?
 subSelectGroupExpression = subQueryExpr
@@ -347,48 +419,149 @@ existsSubSelectExpression = EXISTS _ subQueryExpr
 subQueryExpr = LPAREN _ SELECT _ DISTINCT? _ selectionList _ FROM _ subSelectFilterExpr _ (WHERE _ whereClause)? _ (GROUP _ BY _ groupByListExpr)? _ RPAREN
 subSelectFilterExpr = eventFilterExpression _ (DOT _ viewExpression _ (DOT _ viewExpression)*)? _ (AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ (RETAINUNION/RETAININTERSECTION)?
 arrayExpression = LCURLY _ (expression _ (COMMA _ expression)* )? _ RCURLY _ chainedFunction?
-builtinFunc = SUM _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN _    
-    / AVG _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN   
-    / COUNT _ LPAREN
-      (
-        ((ALL / DISTINCT)? _ expression)
-      /
-        (STAR) 
-      )
-      aggregationFilterExpr? _ RPAREN           
-    / MEDIAN _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
-    / STDDEV _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
-    / AVEDEV _ LPAREN _ (ALL / DISTINCT)? _ expression _ aggregationFilterExpr? _ RPAREN  
-    / firstLastAggregation                
-    / windowAggregation               
-    / COALESCE _ LPAREN _ expression _ COMMA _ expression _ (COMMA _ expression)* _ RPAREN  
-    / PREVIOUS _ LPAREN _ expression _ (COMMA _ expression)? _ RPAREN _ chainedFunction?  
-    / PREVIOUSTAIL _ LPAREN _ expression _ (COMMA _ expression)? _ RPAREN _ chainedFunction?  
-    / PREVIOUSCOUNT _ LPAREN _ expression _ RPAREN          
-    / PREVIOUSWINDOW _ LPAREN _ expression _ RPAREN _ chainedFunction?      
-    / PRIOR _ LPAREN _ number _ COMMA _ eventProperty _ RPAREN        
-    / GROUPING _ LPAREN _ expression _ RPAREN           
-    / GROUPING_ID _ LPAREN _ expressionList _ RPAREN          
-    // MIN _ and _ MAX _ can _ also _ be "Math.min" static _ function _ and "min(price)" aggregation _ function _ and "min(a, b, c...)" built-in _ function
-    // therefore _ handled _ in _ code _ via _ libFunction _ as _ below
-    / INSTANCEOF _ LPAREN _ expression _ COMMA _ classIdentifier _ (COMMA _ classIdentifier)* _ RPAREN  
-    / TYPEOF _ LPAREN _ expression _ RPAREN             
-    / CAST _ LPAREN _ expression _ (COMMA / AS) _ classIdentifier _ RPAREN _ chainedFunction? 
-    / EXISTS _ LPAREN _ eventProperty _ RPAREN            
-    / CURRENT_TIMESTAMP _ (LPAREN _ RPAREN)? _ chainedFunction?       
-    / ISTREAM _ LPAREN _ RPAREN               
-    
+builtinFunc = 
+    sumFunction    
+  / avgFunction
+  / countFunction
+  / medianFunction 
+  / stddevFunction
+  / avedevFunction
+  / firstLastAggregation                
+  / windowAggregation               
+  / coalesceFunction
+  / previousFunction
+  / previousTailFunction
+  / previousCountFunction          
+  / (PREVIOUSWINDOW _ LPAREN _ expression _ RPAREN _ chainedFunction?)      
+  / (PRIOR _ LPAREN _ number _ COMMA _ eventProperty _ RPAREN)
+  / (GROUPING _ LPAREN _ expression _ RPAREN )
+  / (GROUPING_ID _ LPAREN _ expressionList _ RPAREN )
+  // MIN and MAX can also be "Math.min" static function and "min(price)" aggregation function and "min(a, b, c...)" built-in function
+  // therefore handled in code via libFunction as below
+  / (INSTANCEOF _ LPAREN _ expression _ COMMA _ classIdentifier _ (COMMA _ classIdentifier)* _ RPAREN)
+  / (TYPEOF _ LPAREN _ expression _ RPAREN)
+  / (CAST _ LPAREN _ expression _ (COMMA / AS) _ classIdentifier _ RPAREN _ chainedFunction? )
+  / (EXISTS _ LPAREN _ eventProperty _ RPAREN )
+  / (CURRENT_TIMESTAMP _ (LPAREN _ RPAREN)? _ chainedFunction? )
+  / (ISTREAM _ LPAREN _ RPAREN )
+  
+
+avgFunction = AVG _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ aggregator:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "avg",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": aggregator
+  }; 
+}
+sumFunction = SUM _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ aggregator:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "sum",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": aggregator
+  };
+}
+countFunction = COUNT _ LPAREN _ ((distinct:(ALL / DISTINCT)? _ params:expression)/(STAR)) agg:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "count",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": agg
+  };
+}
+medianFunction = MEDIAN _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ agg:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "median",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": agg
+  };
+}
+stddevFunction = STDDEV _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ agg:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "stddev",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": agg
+  };
+}
+avedevFunction = AVEDEV _ LPAREN _ distinct:(ALL / DISTINCT)? _ params:expression _ agg:aggregationFilterExpr? _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "avedev",
+    "distinct":distinct,
+    "parameter": params,
+    "aggregator": agg
+  };
+}
+
+coalesceFunction = COALESCE _ LPAREN _ first:expression _ COMMA _ second:expression _ rest:(COMMA _ expression)* _ RPAREN
+{
+  var arr = [first, second];
+  if(rest !== null){
+    rest = rest.map(function(e) {return e[2];});
+  }
+  return {
+    "type": "function", 
+    "name": "coalesce",
+    "parameters": flattenArray(arr.concat(rest))
+  };  
+}
+
+previousFunction = PREVIOUS _ LPAREN _ exp:expression _ property:(COMMA _ expression)? _ RPAREN _ chained:chainedFunction?
+{
+  return {
+    "type": "function", 
+    "name": "prev",
+    "parameter": exp,
+    "property": property[2],
+    "chainedFunction": chained
+  };  
+}
+
+previousTailFunction = PREVIOUSTAIL _ LPAREN _ exp:expression _ property:(COMMA _ expression)? _ RPAREN _ chained:chainedFunction?
+{
+  return {
+    "type": "function", 
+    "name": "prevtail",
+    "parameter": exp,
+    "property": property[2],
+    "chainedFunction": chained
+  };  
+}
+
+previousCountFunction = PREVIOUSCOUNT _ LPAREN _ exp:expression _ RPAREN
+{
+  return {
+    "type": "function", 
+    "name": "prevcount",
+    "parameter": exp,
+  };   
+} 
+
 firstLastAggregation = (FIRST / LAST) _ LPAREN _  (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
 lastAggregation = LPAREN _ (accessAggExpr _ (COMMA _ expression)?)? _ RPAREN _ chainedFunction?
 windowAggregation = WINDOW _ LPAREN _ accessAggExpr? _ RPAREN _ chainedFunction?
 accessAggExpr = STAR
     / propertyStreamSelector
     / expression
-aggregationFilterExpr = COMMA _ expression
+aggregationFilterExpr = COMMA _ exp:expression { return exp; }
 eventPropertyOrLibFunction = eventProperty 
     / libFunction
-libFunction = libFunctionWithClass _ (DOT _ libFunctionNoClass)*
-libFunctionWithClass = (classIdentifier _ DOT)? _ funcIdentTop _ (LPAREN _ libFunctionArgs? _ RPAREN)?; 
+libFunction = libFunctionWithClass (DOT libFunctionNoClass)*
+libFunctionWithClass = (classIdentifier DOT)? _ funcIdentTop _ (LPAREN _ libFunctionArgs? _ RPAREN)?; 
 libFunctionNoClass = funcIdentChained _ (LPAREN _ libFunctionArgs? RPAREN)?;  
 funcIdentTop = escapableIdent
     / MAX 
@@ -417,15 +590,10 @@ followedByExpression = or:orExpression _ followed:(followedByRepeat)*
 followedByRepeat = first:( FOLLOWED_BY /  ( FOLLOWMAX_BEGIN _ expression _ FOLLOWMAX_END)) _ last:orExpression 
 orExpression = and:andExpression rest:( OR_EXPR _ andExpression)*
 {
-  rest = rest.map(function(e) {return e[1];});
   return {"and": and, "ors": rest};
 }
 andExpression = match:matchUntilExpression _ rest:( AND_EXPR _ matchUntilExpression)*
-{
-  rest = rest.map(function(e) {return e[1];});
-  rest.unshift(match)
-  return rest;
-}
+
 matchUntilExpression = range:matchUntilRange? _ qual:qualifyExpression _ until:(UNTIL _ qualifyExpression)?
 {
   until = until === null? null : until[1];
@@ -447,7 +615,7 @@ guardPostFix = pattern:(atomicExpression / LPAREN _ patternExpression _ RPAREN) 
 
   return {"expression": pattern, "where": where};
 }
-distinctExpressionList = LPAREN _ distinctExpressionAtom _ (COMMA _ distinctExpressionAtom)* _ RPAREN
+distinctExpressionList = LPAREN _ distinctExpressionAtom (_ COMMA _ distinctExpressionAtom)* _ RPAREN
 distinctExpressionAtom = expressionWithTime
 atomicExpression = obs:observerExpression /  pattern:patternFilterExpression
 {
@@ -464,7 +632,16 @@ matchUntilRange = LBRACK _ ( expression _ ( COLON _ expression?)? /  COLON _ exp
 //   Operators are the usual bunch =, <, >, =<, >= 
 //   Ranges such as 'property in [a,b]' are allowed and ([ and )] distinguish open/closed range endpoints
 //----------------------------------------------------------------------------
-eventFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? _ RPAREN)? _ propertyExpression?
+eventFilterExpression = name:(keywordNotAllowedIdent _ EQUALS)? _ className:classIdentifier _ filter:(LPAREN _ expressionList? _ RPAREN)? _ property:propertyExpression?
+{
+  if(filter !== null) filter = filter[2];
+  return {
+    "name": name,
+    "class": className,
+    "filter": filter,
+    "property": property
+  };
+}
 propertyExpression = propertyExpressionAtomic _ (propertyExpressionAtomic)*
 propertyExpressionAtomic = LBRACK _ propertyExpressionSelect? _ expression _ propertyExpressionAnnotation? _ (AS _ keywordNotAllowedIdent)? _ (WHERE _ expression)? _ RBRACK
 propertyExpressionSelect = SELECT _ propertySelectionList _ FROM
@@ -472,18 +649,22 @@ propertyExpressionAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ keywo
 propertySelectionList = propertySelectionListElement (_ COMMA _ propertySelectionListElement)*
 propertySelectionListElement = STAR
   / propertyStreamSelector
-  / expression (_ AS _ IDENT)?
+  / expression (_ AS _ keywordNotAllowedIdent)?
 propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (_ AS _ keywordNotAllowedIdent)?
 patternFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? RPAREN)? _ propertyExpression? _ patternFilterAnnotation?
 patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ RPAREN)?
-classIdentifier = first:escapableStr _ rest:(DOT _ escapableStr)* 
+classIdentifier = first:escapableStr rest:(DOT escapableStr)* 
   { 
     var fullClassName = first + stringFromArray(rest);
     return {"type": "classIdentifier", "name": fullClassName};
   }
 classIdentifierNonGreedy = escapableStr _ (DOT _ escapableStr)*
-expressionList = expression _ (COMMA _ expression)*
-expressionWithTimeList = expressionWithTimeInclLast _ (COMMA _ expressionWithTimeInclLast)*
+expressionList = first:expression  rest:(_ COMMA _ expression)*
+{
+  rest.unshift(first);
+  return rest;
+}
+expressionWithTimeList = expressionWithTimeInclLast (_ COMMA _ expressionWithTimeInclLast)*
 expressionWithTime = lastWeekdayOperand
   / timePeriod
   / expressionQualifyable
@@ -509,7 +690,7 @@ numericListParameter = rangeOperand
 eventProperty = eventPropertyAtomic (_ DOT _ eventPropertyAtomic)*
  eventPropertyAtomic = eventPropertyIdent _ ( LBRACK _ number _ RBRACK _ (QUESTION)? /
       LPAREN _ (STRING_LITERAL / QUOTED_STRING_LITERAL) _ RPAREN _ (QUESTION)? / QUESTION)?
-eventPropertyIdent = IDENT _ (ESCAPECHAR _ DOT _ IDENT?)*
+eventPropertyIdent = allKeywordsNotAllowedIntent _ (ESCAPECHAR _ DOT _ allKeywordsNotAllowedIntent?)*
 keywordNotAllowedIdent = kw:(!keywords / keywords ) id:IDENT 
   {
     if(kw === undefined){ kw = "";}
@@ -526,7 +707,9 @@ allKeywordsNotAllowedIntent = kw:(!allKeywords / allKeywords) id: IDENT
   if(kw === undefined){ kw = "";}
   return kw+id;
 }
-allKeywords = patternKeywords / keywords
+allKeywords = patternKeywords / keywords / additionalKeywords
+
+additionalKeywords = FROM
 
 patternKeywords = 
   AND_EXPR
@@ -766,7 +949,7 @@ LBRACK =  '['
 RBRACK =  ']'
 LCURLY =  '{'
 RCURLY =  '}'
-COLON =  ' = '
+COLON =  ':'
 COMMA =  ','
 EQUAL =  '=='
 LNOT =  '!'
@@ -804,7 +987,7 @@ NUM_FLOAT =  '\u18FD'
 ESCAPECHAR =  '\\'
 ESCAPEBACKTICK =  '\`'
 ATCHAR =  '@'
-_ = [ \t\r\n\f]*
+_ = [ \t\r\n\f]* {return null;}
 WS = _
 SL_COMMENT = '//' [^\n\r]*
 ML_COMMENT = '/*' [^(*/)]* '*/'
@@ -816,11 +999,13 @@ STRING_LITERAL = '"' str:( EscapeSequence / [^\\""] )* '"'
   }
 EscapeSequence = '\\'( 'n' / 'r' / 't' / 'b'/ 'f' / '"' / '\'' / '\\' / UnicodeEscape / OctalEscape / .)
 IDENT = first:( [a-zA-Z] / '_' / '$') rest:( [a-zA-Z] / '_' / [0-9]  / '$')* 
-  { return first + stringFromArray(rest);}
+{ 
+  return first + stringFromArray(rest);
+}
 IntegerLiteral = DecimalIntegerLiteral 
-    / HexIntegerLiteral 
-    / OctalIntegerLiteral 
-    / BinaryIntegerLiteral
+  / HexIntegerLiteral 
+  / OctalIntegerLiteral 
+  / BinaryIntegerLiteral
 FloatingPointLiteral = DecimalFloatingPointLiteral / HexadecimalFloatingPointLiteral
 OctalEscape = '\\' ([0-3] [0-7] [0-7] / [0-7] [0-7] / [0-7])
 UnicodeEscape = '\\' 'u' HexDigit _ HexDigit _ HexDigit _ HexDigit              
@@ -829,8 +1014,21 @@ HexIntegerLiteral = HexNumeral _ IntegerTypeSuffix?
 OctalIntegerLiteral = OctalNumeral _ IntegerTypeSuffix?
 BinaryIntegerLiteral = BinaryNumeral _ IntegerTypeSuffix?
 IntegerTypeSuffix = [lL]
-DecimalNumeral = '0' / NonZeroDigit (Digits? / Underscores _ Digits)
-Digits = Digit (DigitOrUnderscore* Digit)?
+DecimalNumeral = zero:'0' / nzero:NonZeroDigit digits:(Digits? / Underscores _ Digits)
+{
+  var arr = [];
+  if(typeof zero === 'undefined') var zero = null;
+  if(zero !== null)  arr.push(zero);
+  if(nzero !== null) arr.push(nzero);
+  if(digits!== null) arr.push(digits);
+  return makeInteger(arr);
+}
+Digits = first:Digit rest:(DigitOrUnderscore* Digit)?
+{
+  if(rest === null) rest = [];
+  rest.unshift(first);
+  return makeInteger(rest);
+}
 Digit = '0' / NonZeroDigit
 NonZeroDigit = [1-9]
 DigitOrUnderscore = Digit / '_'
@@ -852,7 +1050,10 @@ DecimalFloatingPointLiteral = Digits '.' Digits? ExponentPart? FloatTypeSuffix?
     /   Digits _ ExponentPart _ FloatTypeSuffix?
     /   Digits _ FloatTypeSuffix
 ExponentPart =  ExponentIndicator _ SignedInteger
-SignedInteger = sig:Sign? digit:[0-9]+ {return sign + makeInteger(digits)}
+SignedInteger = sig:Sign? digit:[0-9]+ 
+{
+  return sign + makeInteger(digits)
+}
 ExponentIndicator = [eE]
 Sign = [+-]
 FloatTypeSuffix = [fFdD]
