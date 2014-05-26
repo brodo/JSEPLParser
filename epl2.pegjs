@@ -8,6 +8,18 @@
   function isEmptyArray(arr){
     return arr instanceof Array && arr.length === 0;
   }
+
+  function flattenEverything(thing){
+    var keys = Object.keys(thing);
+    if(keys.length === 1){
+      return flattenEverything(thing[keys[0]]);
+    }
+    if(thing instanceof Array){
+      return flattenArray(thing);
+    }
+    return thing;
+  }
+
   function flattenArray(arr){
     if(!(arr instanceof Array)) return arr;
     arr = filterArray(arr);
@@ -32,7 +44,7 @@ start = startEPLExpressionRule / startPatternExpressionRule
 //----------------------------------------------------------------------------
 startPatternExpressionRule = prefix:(annotationEnum / expressionDecl)* _ pattern:patternExpression
   {
-    return {"prefix": prefix,"pattern":pattern}
+    return {"prefix": prefix,"pattern":flattenEverything(pattern)}
   }
 startEPLExpressionRule = prefix:(annotationEnum / expressionDecl)* _ expression:eplExpression
   {
@@ -113,12 +125,12 @@ selectExpr = (INSERT _ insertIntoExpr)?
         "attributes": sel, 
         "from": from,
         "match": match,
-        "where": flattenArray(where),
-        "group": flattenArray(group),
-        "having": flattenArray(having),
-        "output": flattenArray(output),
-        "orderBy": flattenArray(orderBy),
-        "rowLimit": flattenArray(rowLimit)
+        "where": flattenArray((where !== null) && where[3]),
+        "group": flattenArray((group !== null) && group[5]),
+        "having": flattenArray((having !== null) && having[3]),
+        "output": flattenArray((output !== null) && output[3]),
+        "orderBy": flattenArray((orderBy !== null) && orderBy[5] ),
+        "rowLimit": flattenArray((rowLimit !== null) && rowLimit[3])
       }
     }
 
@@ -243,7 +255,7 @@ streamSelector = ident:allKeywordsNotAllowedIntent (DOT STAR)? _ as:(AS _ allKey
   return {"type": "streamSelector", "identifier": ident, "as": asident};
 }
 streamExpression = exp:(eventFilterExpression / patternInclusionExpression / databaseJoinExpression / methodJoinExpression ) _
-  view:(DOT _ viewExpression _ (DOT _ viewExpression)*)? _ as:(AS _ keywordNotAllowedIdent / keywordNotAllowedIdent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
+  view:(DOT _ viewExpression _ (DOT _ viewExpression)*)? _ as:(AS _ allKeywordsNotAllowedIntent / allKeywordsNotAllowedIntent)? _ uni:(UNIDIRECTIONAL)? _ retain:(RETAINUNION/RETAININTERSECTION)?
 {
   var isUnidirectional = (uni !== null),
     shouldRetain = (retain !== null);
@@ -263,7 +275,7 @@ streamExpression = exp:(eventFilterExpression / patternInclusionExpression / dat
 }
 forExpr = FOR _ keywordNotAllowedIdent _ (LPAREN _ expressionList? _ RPAREN)?
 patternInclusionExpression = PATTERN _ ann:annotationEnum* _ LBRACK _ expr:patternExpression _ RBRACK {
-  return {"annotation": ann, "pattern": expr};
+  return {"annotation": ann, "pattern": flattenEverything(expr)};
 }
 databaseJoinExpression = SQL _ COLON _ keywordNotAllowedIdent _ LBRACK (STRING_LITERAL / QUOTED_STRING_LITERAL) _ (METADATASQL _ (STRING_LITERAL / QUOTED_STRING_LITERAL))? _ RBRACK; 
 methodJoinExpression = keywordNotAllowedIdent _ COLON _ classIdentifier _ (LPAREN _ expressionList? RPAREN)?
@@ -333,9 +345,9 @@ caseExpression = (CASE _ whenClause+ _ elseClause? _ END)
   / (CASE _ expression _ whenClause+ _ elseClause? _ END)
   / evalOrExpression
 
-evalOrExpression = ev:evalAndExpression _ orexp:(OR_EXPR _ evalAndExpression)*
+evalOrExpression = ev:evalAndExpression  orexp:(_ OR_EXPR _ evalAndExpression)*
 {
-  return (typeof orexp === 'undefined' || orexp === null || isEmptyArray(orexp)) ? ev : {"andExpression": ev, "or": orexp};
+  return (typeof orexp === 'undefined' || orexp === null || isEmptyArray(orexp)) ? ev : {"andExpression": ev, "or": orexp[3]};
 }
 evalAndExpression = bw:bitWiseExpression  andexp:(_ AND_EXPR _ bitWiseExpression)*
 {
@@ -347,12 +359,21 @@ bitWiseExpression = first:negatedExpression rest:(_ (BAND/BOR/BXOR) _ negatedExp
   return rest;
 } 
 negatedExpression = evalEqualsExpression / NOT_EXPR _ evalEqualsExpression
-evalEqualsExpression = evalRelationalExpression  
-  ( _ 
+evalEqualsExpression = rat:evalRelationalExpression  
+  exp:( _ 
     (EQUALS / IS / IS _ NOT_EXPR/ SQL_NE / NOT_EQUAL) _ 
     ( evalRelationalExpression / (ANY / SOME / ALL) _
     ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression ) )
   )*
+{
+  if(!isEmptyArray(exp)){
+    return {
+      "name": flattenArray(rat), 
+      "expression": flattenArray(exp)
+    };
+  }
+  return flattenArray(rat);
+}
 
 evalRelationalExpression = concatenationExpr _  
   ( 
@@ -664,16 +685,41 @@ betweenList = concatenationExpr _ AND_EXPR _ concatenationExpr;
 //   On the atomic level an expression has filters, and observer-statements.
 //----------------------------------------------------------------------------
 patternExpression = followedByExpression
-followedByExpression = or:orExpression _ followed:(followedByRepeat)*
+followedByExpression = or:orExpression _ followed:followedByRepeat*
 {
-  return {"or": or, "followed-by": followed};
+  if(followed === null) return or;
+  followed.unshift(or);
+  if(followed.length === 1) return followed[0];
+  return {"type": "followedByPattern", "pattern": followed};
 }
-followedByRepeat = first:( FOLLOWED_BY /  ( FOLLOWMAX_BEGIN _ expression _ FOLLOWMAX_END)) _ last:orExpression 
-orExpression = and:andExpression rest:( OR_EXPR _ andExpression)*
+followedByRepeat = first:( FOLLOWED_BY /  ( FOLLOWMAX_BEGIN _ expression _ FOLLOWMAX_END)) _ last:orExpression
 {
-  return {"and": and, "ors": rest};
+ if(first === "->"){
+  return last;
+ }
+ else {
+  return {
+    "followMax": flattenEverything(first[2]),
+    "or": last
+  }
+ }
+} 
+orExpression = and:andExpression rest:( _ OR_EXPR _ andExpression)*
+{
+  if(rest === null) return and;
+  rest = rest.map(function(e){return e[3];});
+  rest.unshift(and);
+  if(rest.length === 1) return rest[0];
+  return {"type": "orPattern", "pattern": rest};
 }
-andExpression = match:matchUntilExpression _ rest:( AND_EXPR _ matchUntilExpression)*
+andExpression = match:matchUntilExpression  rest:( _ AND_EXPR _ matchUntilExpression)*
+{
+  if(rest === null) return match;
+  rest = rest.map(function(e){return e[3];});
+  rest.unshift(match);
+  if(rest.length === 1) return rest[0];
+  return {"type": "andPattern", "pattern": rest};
+}
 
 matchUntilExpression = range:matchUntilRange? _ qual:qualifyExpression _ until:(UNTIL _ qualifyExpression)?
 {
@@ -693,8 +739,7 @@ qualifyExpression = first:(( EVERY_EXPR /   NOT_EXPR /   EVERY_DISTINCT_EXPR _ d
 }
 guardPostFix = pattern:(atomicExpression / LPAREN _ patternExpression _ RPAREN) _ where:((WHERE _ guardWhereExpression) /  (WHILE _ guardWhileExpression))?
 {
-
-  return {"expression": pattern, "where": where};
+  return {"expression": pattern, "whereOrWhile": where};
 }
 distinctExpressionList = LPAREN _ distinctExpressionAtom (_ COMMA _ distinctExpressionAtom)* _ RPAREN
 distinctExpressionAtom = expressionWithTime
@@ -732,7 +777,19 @@ propertySelectionListElement = STAR
   / propertyStreamSelector
   / expression (_ AS _ keywordNotAllowedIdent)?
 propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (_ AS _ keywordNotAllowedIdent)?
-patternFilterExpression = (keywordNotAllowedIdent _ EQUALS)? _ classIdentifier _ (LPAREN _ expressionList? RPAREN)? _ propertyExpression? _ patternFilterAnnotation?
+patternFilterExpression = ident:(keywordNotAllowedIdent _ EQUALS)? _ stream:classIdentifier _ condition:(LPAREN _ expressionList? RPAREN)? _ property:propertyExpression? _ annotation:patternFilterAnnotation?
+{
+  if(condition != null){
+    condition = condition[2]
+  }
+  return {
+    "name": (ident !== null) && ident[0],
+    "stream": stream,
+    "condition": condition,
+    "property": property,
+    "annotation": annotation,
+  }
+}
 patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ RPAREN)?
 classIdentifier = first:escapableStr rest:(DOT escapableStr)* 
 { 
@@ -795,7 +852,7 @@ allKeywordsNotAllowedIntent = kw:(!allKeywords / allKeywords) id: IDENT
 }
 allKeywords = patternKeywords / keywords / additionalKeywords
 
-additionalKeywords = FROM
+additionalKeywords = FROM / WHERE / HAVING / GROUP / FOR / ORDER / OUTPUT / ROW_LIMIT_EXPR
 
 patternKeywords = 
   AND_EXPR
