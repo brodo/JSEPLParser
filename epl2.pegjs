@@ -236,7 +236,7 @@ selectClause = _ stream:(RSTREAM / ISTREAM / IRSTREAM)? _ d:DISTINCT? _ list:sel
 }
 selectionList = first:selectionListElement rest:(_ COMMA _ selectionListElement)*
 {
-  rest = rest.map(function(e){return e[2]});
+  rest = rest.map(function(e){return e[3]});
   rest.unshift(first)
   return rest;
 }
@@ -345,34 +345,58 @@ caseExpression = (CASE _ whenClause+ _ elseClause? _ END)
   / (CASE _ expression _ whenClause+ _ elseClause? _ END)
   / evalOrExpression
 
-evalOrExpression = ev:evalAndExpression  orexp:(_ OR_EXPR _ evalAndExpression)*
+evalOrExpression = first:evalAndExpression  rest:(_ OR_EXPR _ evalAndExpression)*
 {
-  return (typeof orexp === 'undefined' || orexp === null || isEmptyArray(orexp)) ? ev : {"andExpression": ev, "or": orexp[3]};
+  if (typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
+    return first;
+  } else {
+    rest = rest.map(function(e){return e[3];});
+    rest.unshift(first);
+    return {"type":"orComparison", "operands": rest};
+  }
 }
-evalAndExpression = bw:bitWiseExpression  andexp:(_ AND_EXPR _ bitWiseExpression)*
+evalAndExpression = first:bitWiseExpression _ rest:( AND_EXPR _ bitWiseExpression)*
 {
-  return (typeof andexp === 'undefined' || andexp === null || isEmptyArray(andexp))? bw : {"bitWiseExpression": bw, "and": andexp};
+  if (typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
+    return first;
+  } else {
+    rest = rest.map(function(e){return e[2];});
+    rest.unshift(first);
+    console.log(JSON.stringify(rest, null, 4));
+    return {"type":"andComparison", "operands": rest};
+  }
 }
 bitWiseExpression = first:negatedExpression rest:(_ (BAND/BOR/BXOR) _ negatedExpression)*
 {
-  rest.unshift(first);
-  return rest;
+  if (typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
+    return first;
+  } else {
+    rest = rest.map(function(e){return {"operator":e[1], "exp": e[3]};});
+    rest.unshift({"operator":null, "exp":first});
+    return {"type":"binaryComparison", "operands": rest};
+  }
 } 
 negatedExpression = evalEqualsExpression / NOT_EXPR _ evalEqualsExpression
-evalEqualsExpression = rat:evalRelationalExpression  
-  exp:( _ 
-    (EQUALS / IS / IS _ NOT_EXPR/ SQL_NE / NOT_EQUAL) _ 
-    ( evalRelationalExpression / (ANY / SOME / ALL) _
-    ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression ) )
+evalEqualsExpression = first:evalRelationalExpression _ 
+  rest:
+  (  
+    (EQUALS / IS / IS _ NOT_EXPR / SQL_NE / NOT_EQUAL) _ 
+    (
+      evalRelationalExpression / 
+      (ANY / SOME / ALL) _ ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression)
+    )
   )*
 {
-  if(!isEmptyArray(exp)){
-    return {
-      "name": flattenArray(rat), 
-      "expression": flattenArray(exp)
+  if (typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
+    return first;
+  } else {
+    var result = [flattenArray(first)];
+    for (var i = 0; i < rest.length; i++) {
+      result.push(flattenArray(rest[i][0]));
+      result.push(flattenArray(rest[i][2]));
     };
+    return result;
   }
-  return flattenArray(rat);
 }
 
 evalRelationalExpression = concatenationExpr _  
@@ -383,11 +407,11 @@ evalRelationalExpression = concatenationExpr _
         / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
       )
   )* 
-  / (_ NOT_EXPR _ )? 
+  /  _ NOT_EXPR? _
   (
     // Represent the optional NOT prefix using the token type by
     // testing 'n' and setting the token type accordingly.
-    (_ IN_SET _
+    (IN_SET _
         (LPAREN / LBRACK) _ expression _ // brackets are for inclusive/exclusive
         (
           ( COLON _ expression )    // range
@@ -396,24 +420,45 @@ evalRelationalExpression = concatenationExpr _
         )
         (RPAREN / RBRACK) 
     )
-    / _ IN_SET _ inSubSelectQuery
-    / _ BETWEEN _ betweenList
-    / _ LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
-    / _ REGEXP _ concatenationExpr
+    / IN_SET _ inSubSelectQuery
+    / BETWEEN _ betweenList
+    / LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
+    / REGEXP _ concatenationExpr
   )
 
-
 inSubSelectQuery = subQueryExpr
-concatenationExpr = additiveExpression _ ( LOR _ additiveExpression (_ LOR _ additiveExpression)* )?
-additiveExpression = multiplyExpression ( _ (PLUS/MINUS) _ multiplyExpression )*
+concatenationExpr = first:additiveExpression _ rest:( LOR _ additiveExpression (_ LOR _ additiveExpression)* )?
+{
+  if(typeof rest !== 'undefined' && rest instanceof Array && rest.length > 0 ){
+    rest.unshift(first);
+    return {
+      "type": "logicalOr",
+      "operands": rest
+    }
+  }
+  return first;
+}
+additiveExpression = first:multiplyExpression _ rest:( (PLUS/MINUS) _ multiplyExpression )*
+{
+  if(typeof rest !== 'undefined' && rest instanceof Array  && rest.length > 0){
+    rest.unshift(first);
+    return {
+      "type": "plusOrMinus",
+      "operands": rest
+    }
+  }
+  return first;
+}
 multiplyExpression = first:unaryExpression _ rest:( _ (STAR/DIV/MOD) _ unaryExpression )*
 {
-  if(typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
-    return first;
-  } 
-  else {
-    return {"leftOperand":first, "operator":rest[0], "rightOperand":rest[1]};
+  if(typeof rest !== 'undefined' && rest instanceof Array  && rest.length > 0){
+    rest.unshift(first);
+    return {
+      "type": "multiplyDivideModulo",
+      "operands": rest
+    }
   }
+  return first;
 }
 unaryExpression = 
     (MINUS _ eventProperty)
@@ -739,6 +784,7 @@ qualifyExpression = first:(( EVERY_EXPR /   NOT_EXPR /   EVERY_DISTINCT_EXPR _ d
 }
 guardPostFix = pattern:(atomicExpression / LPAREN _ patternExpression _ RPAREN) _ where:((WHERE _ guardWhereExpression) /  (WHILE _ guardWhileExpression))?
 {
+  where && where.splice(1,1)
   return {"expression": pattern, "whereOrWhile": where};
 }
 distinctExpressionList = LPAREN _ distinctExpressionAtom (_ COMMA _ distinctExpressionAtom)* _ RPAREN
@@ -749,7 +795,13 @@ atomicExpression = obs:observerExpression /  pattern:patternFilterExpression
   return {"type":"atomic", "observer": obs, "patternFilter": pattern };
 }
 observerExpression = patternKeywordNotAllowedIdent _ COLON _ ( patternKeywordNotAllowedIdent /   AT) _ LPAREN _ expressionWithTimeList? _ RPAREN
-guardWhereExpression = patternKeywordNotAllowedIdent _ COLON _ patternKeywordNotAllowedIdent _ LPAREN _ (expressionWithTimeList)? _ RPAREN
+guardWhereExpression = p1:patternKeywordNotAllowedIdent _ COLON _ p2:patternKeywordNotAllowedIdent _ LPAREN _ exp:(expressionWithTimeList)? _ RPAREN
+{
+  return {
+    "guardName": p1 + ":" + p2,
+    "whereExpressions": flattenArray(exp)
+  }
+}
 guardWhileExpression = LPAREN _ expression _ RPAREN
 // syntax _ is [a:b] or [:b] or [a:] or [a]
 matchUntilRange = LBRACK _ ( expression _ ( COLON _ expression?)? /  COLON _ expression) _ RBRACK
@@ -793,6 +845,7 @@ patternFilterExpression = ident:(keywordNotAllowedIdent _ EQUALS)? _ stream:clas
 patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ RPAREN)?
 classIdentifier = first:escapableStr rest:(DOT escapableStr)* 
 { 
+  rest = rest.map(function(e){return e.join('');});
   var fullClassName = first + stringFromArray(flattenArray(rest));
   return {"type": "classIdentifier", "name": fullClassName};
 }
@@ -802,7 +855,13 @@ expressionList = first:expression  rest:(_ COMMA _ expression)*
   rest.unshift(first);
   return rest;
 }
-expressionWithTimeList = expressionWithTimeInclLast (_ COMMA _ expressionWithTimeInclLast)*
+expressionWithTimeList = first:expressionWithTimeInclLast rest:(_ COMMA _ expressionWithTimeInclLast)*
+{
+  rest = rest.map(function(e){return e[3];});
+  rest.unshift(first);
+  console.log(rest);
+  return rest; 
+}
 expressionWithTime = lastWeekdayOperand
   / timePeriod
   / expressionQualifyable
@@ -923,14 +982,46 @@ timePeriod = (  yearPart _ monthPart? _ weekPart? _ dayPart? _ hourPart? _ minut
     / secondPart _ millisecondPart?
     / millisecondPart
     )
-yearPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_YEARS / TIMEPERIOD_YEAR)
-monthPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MONTHS / TIMEPERIOD_MONTH)
-weekPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_WEEKS / TIMEPERIOD_WEEK)
-dayPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_DAYS / TIMEPERIOD_DAY)
-hourPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_HOURS / TIMEPERIOD_HOUR)
-minutePart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MINUTES / TIMEPERIOD_MINUTE / MIN)
-secondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC) 
-millisecondPart = (numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MILLISECONDS / TIMEPERIOD_MILLISECOND / TIMEPERIOD_MILLISEC) 
+yearPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_YEARS / TIMEPERIOD_YEAR)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "year"};
+}
+monthPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MONTHS / TIMEPERIOD_MONTH)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "month"};
+}
+weekPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_WEEKS / TIMEPERIOD_WEEK)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "week"};
+}
+dayPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_DAYS / TIMEPERIOD_DAY)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "day"};
+}
+hourPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_HOURS / TIMEPERIOD_HOUR)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "hour"};
+}
+minutePart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MINUTES / TIMEPERIOD_MINUTE / MIN)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "minutes"};
+}
+secondPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_SECONDS / TIMEPERIOD_SECOND / TIMEPERIOD_SEC)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "seconds"};
+} 
+millisecondPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (TIMEPERIOD_MILLISECONDS / TIMEPERIOD_MILLISECOND / TIMEPERIOD_MILLISEC)
+{
+  time = flattenArray(time);
+  return {"time": time, "timeUnit": "ms"};
+} 
 number = num:(IntegerLiteral / FloatingPointLiteral) { return flattenArray(num); }
 substitution = QUESTION
 constant = numberconstant / stringconstant / BOOLEAN_TRUE / BOOLEAN_FALSE / VALUE_NULL
@@ -1130,7 +1221,7 @@ NUM_FLOAT =  '\u18FD'
 ESCAPECHAR =  '\\'
 ESCAPEBACKTICK =  '\`'
 ATCHAR =  '@'
-_ = [ \t\r\n\f]* {return null;}
+_ = [ \t\r\n\f]*
 WS = _
 SL_COMMENT = '//' [^\n\r]*
 ML_COMMENT = '/*' [^(*/)]* '*/'
