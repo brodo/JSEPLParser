@@ -846,7 +846,7 @@ patternFilterAnnotation = ATCHAR _ keywordNotAllowedIdent _ (LPAREN _ number _ R
 classIdentifier = first:escapableStr rest:(DOT escapableStr)* 
 { 
   rest = rest.map(function(e){return e.join('');});
-  var fullClassName = first + stringFromArray(flattenArray(rest));
+  var fullClassName = first + stringFromArray(rest);
   return {"type": "classIdentifier", "name": fullClassName};
 }
 classIdentifierNonGreedy = escapableStr _ (DOT _ escapableStr)*
@@ -1022,7 +1022,7 @@ millisecondPart = time:(numberconstant/keywordNotAllowedIdent/substitution) _ (T
   time = flattenArray(time);
   return {"time": time, "timeUnit": "ms"};
 } 
-number = num:(IntegerLiteral / FloatingPointLiteral) { return flattenArray(num); }
+number = num:(FloatingPointLiteral / IntegerLiteral ) { return flattenArray(num); }
 substitution = QUESTION
 constant = numberconstant / stringconstant / BOOLEAN_TRUE / BOOLEAN_FALSE / VALUE_NULL
 numberconstant = (MINUS / PLUS)? _ number
@@ -1277,10 +1277,27 @@ BinaryNumeral = '0' [bB] BinaryDigits
 BinaryDigits = BinaryDigit BinaryDigitOrUnderscore* BinaryDigit?
 BinaryDigit = [01]
 BinaryDigitOrUnderscore = BinaryDigit / '_'
-DecimalFloatingPointLiteral = Digits '.' Digits? ExponentPart? FloatTypeSuffix?
-    /   '.' Digits _ ExponentPart? FloatTypeSuffix?
-    /   Digits _ ExponentPart _ FloatTypeSuffix?
-    /   Digits _ FloatTypeSuffix
+DecimalFloatingPointLiteral = d1:Digits '.' d11:Digits? e1:ExponentPart? FloatTypeSuffix?
+    /   '.' d2:Digits _ e2:ExponentPart? FloatTypeSuffix?
+    /   d3:Digits _ e3:ExponentPart _ FloatTypeSuffix?
+    /   d4:Digits _ FloatTypeSuffix {
+
+  if(d4 !== undefined && d4 !== null){
+    return parseFloat(d4,10);
+  }
+  if(d3 !== undefined && d3 !== null){
+    return parseFloat(d3+e3,10);
+  }
+  if(d2 !== undefined && d2 !== null){
+    if(e2 !== undefined && e2 !== null){
+      return parseFloat(d2+e2,10);
+    }
+  }
+  if(e1 !== undefined && e1 !== null){
+    return parseFloat(d1+'.'+makeInteger(d11) + e1)  
+  }
+  return parseFloat(d1+'.'+makeInteger(d11))
+}
 ExponentPart =  ExponentIndicator _ SignedInteger
 SignedInteger = sig:Sign? digit:[0-9]+ 
 {
