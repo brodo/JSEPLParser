@@ -380,7 +380,7 @@ negatedExpression = evalEqualsExpression / NOT_EXPR _ evalEqualsExpression
 evalEqualsExpression = first:evalRelationalExpression _ 
   rest:
   (  
-    (EQUALS / IS / IS _ NOT_EXPR / SQL_NE / NOT_EQUAL) _ 
+    (NOT_EQUAL/ EQUALS / IS _ NOT_EXPR / SQL_NE/ IS ) _ 
     (
       evalRelationalExpression / 
       (ANY / SOME / ALL) _ ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression)
@@ -1254,10 +1254,11 @@ DecimalNumeral = zero:'0' / nzero:NonZeroDigit digits:(Digits? / Underscores _ D
   if(digits!== null) arr.push(digits);
   return makeInteger(arr);
 }
-Digits = first:Digit rest:(DigitOrUnderscore* Digit)?
+Digits = first:Digit rest:DigitOrUnderscore* last:Digit?
 {
   if(rest === null) rest = [];
   rest.unshift(first);
+  rest.push(last);
   return makeInteger(rest);
 }
 Digit = '0' / NonZeroDigit
@@ -1265,15 +1266,15 @@ NonZeroDigit = [1-9]
 DigitOrUnderscore = Digit / '_'
 Underscores = '_'+
 HexNumeral = '0' [xX] HexDigits
-HexDigits = HexDigit (HexDigitOrUnderscore* HexDigit)?
+HexDigits = HexDigit HexDigitOrUnderscore* HexDigit?
 HexDigit = [0-9a-fA-F]
 HexDigitOrUnderscore = HexDigit /  '_'
 OctalNumeral = '0' Underscores? OctalDigits
-OctalDigits = OctalDigit (OctalDigitOrUnderscore* OctalDigit)?
+OctalDigits = OctalDigit OctalDigitOrUnderscore* OctalDigit?
 OctalDigit = [0-7]
 OctalDigitOrUnderscore = OctalDigit / '_'
 BinaryNumeral = '0' [bB] BinaryDigits
-BinaryDigits = BinaryDigit (BinaryDigitOrUnderscore* BinaryDigit)?
+BinaryDigits = BinaryDigit BinaryDigitOrUnderscore* BinaryDigit?
 BinaryDigit = [01]
 BinaryDigitOrUnderscore = BinaryDigit / '_'
 DecimalFloatingPointLiteral = Digits '.' Digits? ExponentPart? FloatTypeSuffix?
