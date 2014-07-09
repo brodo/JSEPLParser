@@ -12124,13 +12124,13 @@ module.exports = (function() {
         if (s2 !== peg$FAILED) {
           s3 = [];
           s4 = peg$currPos;
-          s5 = peg$parseLT();
+          s5 = peg$parseLE();
           if (s5 === peg$FAILED) {
-            s5 = peg$parseGT();
+            s5 = peg$parseGE();
             if (s5 === peg$FAILED) {
-              s5 = peg$parseLE();
+              s5 = peg$parseLT();
               if (s5 === peg$FAILED) {
-                s5 = peg$parseGE();
+                s5 = peg$parseGT();
               }
             }
           }
@@ -12223,13 +12223,13 @@ module.exports = (function() {
           while (s4 !== peg$FAILED) {
             s3.push(s4);
             s4 = peg$currPos;
-            s5 = peg$parseLT();
+            s5 = peg$parseLE();
             if (s5 === peg$FAILED) {
-              s5 = peg$parseGT();
+              s5 = peg$parseGE();
               if (s5 === peg$FAILED) {
-                s5 = peg$parseLE();
+                s5 = peg$parseLT();
                 if (s5 === peg$FAILED) {
-                  s5 = peg$parseGE();
+                  s5 = peg$parseGT();
                 }
               }
             }

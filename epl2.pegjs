@@ -401,7 +401,7 @@ evalEqualsExpression = first:evalRelationalExpression _
 
 evalRelationalExpression = concatenationExpr _  
   ( 
-    (LT/GT/LE/GE) _
+    (LE/GE/LT/GT) _
       (
         concatenationExpr
         / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
