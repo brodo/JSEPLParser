@@ -468,13 +468,12 @@ unaryExpression =
   / constant
   / substitution
   / (LPAREN _ expression _ RPAREN _ chainedFunction?)
-  / eventPropertyOrLibFunction
+  / eventPropertyOrLibFunction 
   / builtinFunc
   / arrayExpression
   / rowSubSelectExpression 
   / existsSubSelectExpression
   / (NEWKW _ LCURLY _ newAssign  (_ COMMA _ newAssign)* _ RCURLY)
-
 chainedFunction = DOT _ first:libFunctionNoClass _ rest:(DOT _ libFunctionNoClass)*
 {
   rest = rest.map(function(f) {return f[2];});
@@ -888,15 +887,29 @@ numericParameterList = LBRACK _ numericListParameter _ (COMMA _ numericListParam
 numericListParameter = rangeOperand
   / frequencyOperand
   / numberconstant  
-eventProperty = first:eventPropertyAtomic rest:(_ DOT _ eventPropertyAtomic)*
+eventProperty = head:eventPropertyAtomic tail:(DOT eventPropertyAtomic)*
 {
-  rest.unshift(first);
-  return flattenArray(rest);
+  tail = tail.map(function(e){ return e.join('');});
+  var str = head + tail.join('');
+  return {"eventProperty": str};
 }
 
-eventPropertyAtomic = eventPropertyIdent _ ( LBRACK _ number _ RBRACK _ (QUESTION)? /
-      LPAREN _ (STRING_LITERAL / QUOTED_STRING_LITERAL) _ RPAREN _ (QUESTION)? / QUESTION)?
-eventPropertyIdent = allKeywordsNotAllowedIntent _ (ESCAPECHAR _ DOT _ allKeywordsNotAllowedIntent?)*
+eventPropertyAtomic = ident:eventPropertyIdent _ 
+  propAttributes:( LBRACK _ number _ RBRACK _ (QUESTION)? 
+    / LPAREN _ (STRING_LITERAL / QUOTED_STRING_LITERAL) _ RPAREN _ (QUESTION)? 
+    / QUESTION
+  )? {
+    if(propAttributes === null) return ident;
+    return {
+      "ident": ident,
+      "extras": flattenArray(propAttributes)
+    }
+  }
+eventPropertyIdent = head:allKeywordsNotAllowedIntent _ tail:(ESCAPECHAR _ DOT _ allKeywordsNotAllowedIntent?)* {
+  tail = tail.map(function(e){ return [e[0], e[2], e[4]];});
+  tail.unshift(head);
+  return tail; 
+}
 keywordNotAllowedIdent = kw:(!keywords / keywords ) id:IDENT 
   {
     if(kw === undefined){ kw = "";}
