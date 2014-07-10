@@ -399,7 +399,7 @@ evalEqualsExpression = first:evalRelationalExpression _
   }
 }
 
-evalRelationalExpression = concatenationExpr _  
+evalRelationalExpression = relational:(concatenationExpr _  
   ( 
     (LE/GE/LT/GT) _
       (
@@ -424,7 +424,10 @@ evalRelationalExpression = concatenationExpr _
     / BETWEEN _ betweenList
     / LIKE _ concatenationExpr _ (ESCAPE _ stringconstant)?
     / REGEXP _ concatenationExpr
-  )
+  ))
+  {
+    return flattenArray(relational);
+  }
 
 inSubSelectQuery = subQueryExpr
 concatenationExpr = first:additiveExpression _ rest:( LOR _ additiveExpression (_ LOR _ additiveExpression)* )?
@@ -829,11 +832,12 @@ propertySelectionListElement = STAR
   / propertyStreamSelector
   / expression (_ AS _ keywordNotAllowedIdent)?
 propertyStreamSelector = keywordNotAllowedIdent _ DOT _ STAR (_ AS _ keywordNotAllowedIdent)?
-patternFilterExpression = ident:(keywordNotAllowedIdent _ EQUALS)? _ stream:classIdentifier _ condition:(LPAREN _ expressionList? RPAREN)? _ property:propertyExpression? _ annotation:patternFilterAnnotation?
+patternFilterExpression = ident:(keywordNotAllowedIdent _ EQUALS)? 
+  _ stream:classIdentifier 
+  _ condition:(LPAREN _ expr:expressionList? RPAREN { return expr;})? 
+  _ property:propertyExpression? 
+  _ annotation:patternFilterAnnotation?
 {
-  if(condition != null){
-    condition = condition[2]
-  }
   return {
     "name": (ident !== null) && ident[0],
     "stream": stream,
