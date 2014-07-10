@@ -125,12 +125,12 @@ selectExpr = (INSERT _ insertIntoExpr)?
         "attributes": sel, 
         "from": from,
         "match": match,
-        "where": flattenArray((where !== null) && where[3]),
-        "group": flattenArray((group !== null) && group[5]),
-        "having": flattenArray((having !== null) && having[3]),
-        "output": flattenArray((output !== null) && output[3]),
-        "orderBy": flattenArray((orderBy !== null) && orderBy[5] ),
-        "rowLimit": flattenArray((rowLimit !== null) && rowLimit[3])
+        "where": flattenArray(where && where[3]),
+        "group": flattenArray(group && group[5]),
+        "having": flattenArray(having && having[3]),
+        "output": flattenArray(output && output[3]),
+        "orderBy": flattenArray(orderBy && orderBy[5] ),
+        "rowLimit": flattenArray(rowLimit && rowLimit[3])
       }
     }
 
@@ -1277,31 +1277,25 @@ BinaryNumeral = '0' [bB] BinaryDigits
 BinaryDigits = BinaryDigit BinaryDigitOrUnderscore* BinaryDigit?
 BinaryDigit = [01]
 BinaryDigitOrUnderscore = BinaryDigit / '_'
-DecimalFloatingPointLiteral = d1:Digits '.' d11:Digits? e1:ExponentPart? FloatTypeSuffix?
-    /   '.' d2:Digits _ e2:ExponentPart? FloatTypeSuffix?
-    /   d3:Digits _ e3:ExponentPart _ FloatTypeSuffix?
-    /   d4:Digits _ FloatTypeSuffix {
-
-  if(d4 !== undefined && d4 !== null){
-    return parseFloat(d4,10);
+DecimalFloatingPointLiteral = 
+  whole:Digits DOT fraction:Digits? ex:ExponentPart? FloatTypeSuffix? { 
+    var str = whole + '.' + (fraction || '') + (ex || '');
+    return parseFloat(str, 10);
   }
-  if(d3 !== undefined && d3 !== null){
-    return parseFloat(d3+e3,10);
+  / DOT fraction:Digits _ exp:ExponentPart? FloatTypeSuffix? {
+    var str =  '.' + fraction + (exp || '');
+    return parseFloat(str, 10);
   }
-  if(d2 !== undefined && d2 !== null){
-    if(e2 !== undefined && e2 !== null){
-      return parseFloat(d2+e2,10);
-    }
+  / whole:Digits _ exp:ExponentPart _ FloatTypeSuffix? {
+    return parseFloat(whole.toString() + exp.toString(), 10);
   }
-  if(e1 !== undefined && e1 !== null){
-    return parseFloat(d1+'.'+makeInteger(d11) + e1)  
+  / whole:Digits _ FloatTypeSuffix {
+    return whole;
   }
-  return parseFloat(d1+'.'+makeInteger(d11))
-}
-ExponentPart =  ExponentIndicator _ SignedInteger
+ExponentPart =  e:ExponentIndicator _ i:SignedInteger { return e + i;}
 SignedInteger = sig:Sign? digit:[0-9]+ 
 {
-  return sign + makeInteger(digits)
+  return sig + makeInteger(digit)
 }
 ExponentIndicator = [eE]
 Sign = [+-]
