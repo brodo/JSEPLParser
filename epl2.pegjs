@@ -362,7 +362,6 @@ evalAndExpression = first:bitWiseExpression _ rest:( AND_EXPR _ bitWiseExpressio
   } else {
     rest = rest.map(function(e){return e[2];});
     rest.unshift(first);
-    console.log(JSON.stringify(rest, null, 4));
     return {"type":"andComparison", "operands": rest};
   }
 }
@@ -382,18 +381,22 @@ evalEqualsExpression = first:evalRelationalExpression _
   (  
     (NOT_EQUAL/ EQUALS / IS _ NOT_EXPR / SQL_NE/ IS ) _ 
     (
-      evalRelationalExpression / 
-      (ANY / SOME / ALL) _ ((LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression)
+      evalRelationalExpression 
+      / (ANY / SOME / ALL) _ ((LPAREN _ expressionList? _ RPAREN {return expr;})
+      / subSelectGroupExpression)
     )
   )*
 {
+  var comperator;
   if (typeof rest === 'undefined' || rest === null || isEmptyArray(rest)){
     return first;
   } else {
     var result = [flattenArray(first)];
     for (var i = 0; i < rest.length; i++) {
-      result.push(flattenArray(rest[i][0]));
-      result.push(flattenArray(rest[i][2]));
+      result.push({
+        "comperator": rest[i][0],
+        "value": rest[i][2]
+      });
     };
     return result;
   }
@@ -401,11 +404,14 @@ evalEqualsExpression = first:evalRelationalExpression _
 
 evalRelationalExpression = relational:(concatenationExpr _  
   ( 
-    (LE/GE/LT/GT) _
-      (
+    comp:(LE/GE/LT/GT) _
+      concat:(
         concatenationExpr
         / (ANY / SOME / ALL) _ ( (LPAREN _ expressionList? _ RPAREN) / subSelectGroupExpression )
       )
+      {
+        return {"comperator": comp, "value": flattenArray(concat)};
+      }
   )* 
   /  _ NOT_EXPR? _
   (
@@ -862,7 +868,6 @@ expressionWithTimeList = first:expressionWithTimeInclLast rest:(_ COMMA _ expres
 {
   rest = rest.map(function(e){return e[3];});
   rest.unshift(first);
-  console.log(rest);
   return rest; 
 }
 expressionWithTime = lastWeekdayOperand
