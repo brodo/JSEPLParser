@@ -790,10 +790,11 @@ qualifyExpression = first:(( EVERY_EXPR /   NOT_EXPR /   EVERY_DISTINCT_EXPR _ d
   return {"operator": operator, "distinct": partTwo, "guard": guard};
 
 }
-guardPostFix = pattern:(atomicExpression / LPAREN _ patternExpression _ RPAREN) _ where:((WHERE _ guardWhereExpression) /  (WHILE _ guardWhileExpression))?
+guardPostFix = pattern:(atomicExpression / LPAREN _ ex:patternExpression _ RPAREN { return ex;})
+  _ where:((WHERE _ guardWhereExpression) /  (WHILE _ guardWhileExpression))?
 {
   where && where.splice(1,1)
-  return {"expression": pattern, "whereOrWhile": where};
+  return {"expression": flattenArray(pattern), "whereOrWhile": where};
 }
 distinctExpressionList = LPAREN _ distinctExpressionAtom (_ COMMA _ distinctExpressionAtom)* _ RPAREN
 distinctExpressionAtom = expressionWithTime
