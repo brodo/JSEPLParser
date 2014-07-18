@@ -10,6 +10,7 @@
   }
 
   function flattenEverything(thing){
+    if(!(thing instanceof Object)) return thing;
     var keys = Object.keys(thing);
     if(keys.length === 1){
       return flattenEverything(thing[keys[0]]);
@@ -40,7 +41,7 @@
 start = startEPLExpressionRule / startPatternExpressionRule
 
 //----------------------------------------------------------------------------
-// Start _ Rules
+// Start Rules
 //----------------------------------------------------------------------------
 startPatternExpressionRule = prefix:(annotationEnum / expressionDecl)* _ pattern:patternExpression
   {
@@ -53,7 +54,7 @@ startEPLExpressionRule = prefix:(annotationEnum / expressionDecl)* _ expression:
 startEventPropertyRule = eventProperty
 startJsonValueRule = jsonvalue
 //----------------------------------------------------------------------------
-// Expression _ Declaration
+// Expression Declaration
 //----------------------------------------------------------------------------
 expressionDecl = EXPRESSIONDECL _ classIdentifier? _ (LBRACK _ RBRACK)? _ expressionDialect? _ keywordNotAllowedIdent _ (LPAREN _ columnList? _ RPAREN)? _ expressionDef
 expressionDialect = keywordNotAllowedIdent _ COLON
@@ -774,7 +775,7 @@ andExpression = match:matchUntilExpression  rest:( _ AND_EXPR _ matchUntilExpres
   return {"type": "andPattern", "pattern": rest};
 }
 
-matchUntilExpression = range:matchUntilRange? _ qual:qualifyExpression _ until:(UNTIL _ qualifyExpression)?
+matchUntilExpression = range:matchUntilRange? _ qual:(PREDEFINED_PATTERNS / qualifyExpression) _ until:(UNTIL _ qualifyExpression)?
 {
   until = until === null? null : until[1];
   return {"range": range, "qualify": qual, "until": until };
@@ -1244,10 +1245,10 @@ NUM_FLOAT =  '\u18FD'
 ESCAPECHAR =  '\\'
 ESCAPEBACKTICK =  '\`'
 ATCHAR =  '@'
-_ = [ \t\r\n\f]*
+_ =   SL_COMMENT / ML_COMMENT / [ \t\r\n\f]* 
 WS = _
-SL_COMMENT = '//' [^\n\r]*
-ML_COMMENT = '/*' [^(*/)]* '*/'
+SL_COMMENT = [ \t]* '//' c:[^\n\r]* { return {"comment": stringFromArray(c)}}
+ML_COMMENT = [ \t]* '/*' c:[^(*/)]* '*/' [ \t]* { return {"comment": stringFromArray(c)}}
 TICKED_STRING_LITERAL = '`' ( EscapeSequence / [^`\\] )* '`' 
 QUOTED_STRING_LITERAL = '\'' ( EscapeSequence / [^'\\] )* '\''
 STRING_LITERAL = '"' str:( EscapeSequence / [^\\""] )* '"'
@@ -1327,3 +1328,10 @@ HexadecimalFloatingPointLiteral = HexSignificand _ BinaryExponent _ FloatTypeSuf
 HexSignificand = HexNumeral '.'? / '0' HexDigits? '.' HexDigits
 BinaryExponent = BinaryExponentIndicator _ SignedInteger
 BinaryExponentIndicator = [pP]
+
+
+//----------------------------------------------------------------------------
+// The fllowing patten is replaced by a generated one
+//----------------------------------------------------------------------------
+
+PREDEFINED_PATTERNS = qualifyExpression
